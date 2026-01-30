@@ -1,37 +1,47 @@
 # AI Multimodal Device Control System
 
 ## 📋 Project Overview
-[Provide a brief description of your AI Multimodal Device Control System project. Explain what it does, what problem it solves, and why it's innovative.]
+
+A Laptop/Desktop Control System Which used Speech, Hand gestures and User Context and preferences wisely Using AI Technilogies
 
 ## 👥 Team Members
-- **[Team Member 1 Name]** - [Role/Responsibilities] - [GitHub: @username]
+
+- **Chandan B L** - Designer, Developer - [GitHub: @CHANDU976]
 - **[Team Member 2 Name]** - [Role/Responsibilities] - [GitHub: @username]
 - **[Team Member 3 Name]** - [Role/Responsibilities] - [GitHub: @username]
 - **[Team Member 4 Name]** - [Role/Responsibilities] - [GitHub: @username]
 
 ## 🎯 Project Goals
+
 [List the main objectives and goals of this project]
+
 - Goal 1: [Description]
 - Goal 2: [Description]
 - Goal 3: [Description]
 
 ## ✨ Features
+
 [List the key features of your system]
+
 - **Feature 1**: [Description]
 - **Feature 2**: [Description]
 - **Feature 3**: [Description]
 - **Feature 4**: [Description]
 
 ## 🏗️ System Architecture
+
 [Provide an overview of the system architecture, including major components and how they interact]
 
 ### Components
+
 - **Component 1**: [Description]
 - **Component 2**: [Description]
 - **Component 3**: [Description]
 
 ## 🛠️ Technologies Used
+
 [List the main technologies, frameworks, and tools used in the project]
+
 - **Programming Languages**: [e.g., Python, JavaScript]
 - **AI/ML Frameworks**: [e.g., TensorFlow, PyTorch, OpenCV]
 - **Multimodal Processing**: [e.g., Speech Recognition, Computer Vision, NLP]
@@ -41,6 +51,7 @@
 ## 📦 Installation
 
 ### Prerequisites
+
 ```bash
 # List required software, packages, or dependencies
 # Example:
@@ -50,6 +61,7 @@
 ```
 
 ### Setup Instructions
+
 ```bash
 # Clone the repository
 git clone https://github.com/CHANDU976/AI-Multimodal-Device-Control-System-.git
@@ -65,6 +77,7 @@ cd AI-Multimodal-Device-Control-System-
 ```
 
 ## 🚀 Usage
+
 [Provide instructions on how to use the system]
 
 ```bash
@@ -74,13 +87,17 @@ cd AI-Multimodal-Device-Control-System-
 ```
 
 ## 📖 Documentation
+
 [Link to additional documentation, API references, or user guides]
+
 - [User Guide](docs/user-guide.md)
 - [API Documentation](docs/api.md)
 - [Developer Guide](docs/developer-guide.md)
 
 ## 🧪 Testing
+
 [Explain how to run tests]
+
 ```bash
 # Example:
 # pytest tests/
@@ -88,14 +105,18 @@ cd AI-Multimodal-Device-Control-System-
 ```
 
 ## 🗓️ Project Timeline
+
 [Outline major milestones and deadlines]
+
 - **Week 1-2**: [Milestone description]
 - **Week 3-4**: [Milestone description]
 - **Week 5-6**: [Milestone description]
 - **Week 7-8**: [Milestone description]
 
 ## 📊 Project Status
+
 [Current status of the project]
+
 - [ ] Project Setup
 - [ ] Component 1 Implementation
 - [ ] Component 2 Implementation
@@ -105,7 +126,9 @@ cd AI-Multimodal-Device-Control-System-
 - [ ] Final Presentation
 
 ## 🤝 Contributing
+
 [Guidelines for team members on how to contribute]
+
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
 3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
@@ -113,18 +136,24 @@ cd AI-Multimodal-Device-Control-System-
 5. Open a Pull Request
 
 ## 📝 License
+
 [Specify the license for your project, e.g., MIT, Apache 2.0, or All Rights Reserved]
 
 ## 📧 Contact
+
 For questions or feedback, please contact:
+
 - [Team Member Name] - [email@example.com]
 - Project Link: [https://github.com/CHANDU976/AI-Multimodal-Device-Control-System-](https://github.com/CHANDU976/AI-Multimodal-Device-Control-System-)
 
 ## 🙏 Acknowledgments
+
 [Credit any resources, libraries, or people that helped with the project]
+
 - [Resource/Person 1]
 - [Resource/Person 2]
 - [Resource/Person 3]
 
 ---
+
 *This project is part of [Course Name/Organization] - [Year]*
