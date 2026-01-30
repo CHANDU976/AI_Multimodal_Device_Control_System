@@ -53,19 +53,26 @@ A Laptop/Desktop Control System Which used Speech, Hand gestures and User Contex
 ### Prerequisites
 
 ```bash
-# List required software, packages, or dependencies
-# Example:
+#ffmpeg :
+#windows 10+ : "winget ffmpeg --location <path>" ( "--location <path>" is optional)
+# or just add "<cloned location>/Tools/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe" after cloning the repository
+#linux : sudo apt install ffmpeg
+#mac: brew install ffmpeg 
+
 # Python 3.8+
 # pip
-# [Other requirements]
+# Vosk library : pip install vosk
+# whisper library : pip install openai-whisper
 ```
 
 ### Setup Instructions
 
 ```bash
+# Install Git LFS before you clone the repository
+# run "git init", "git lfs install" then clone repo
 # Clone the repository
 git clone https://github.com/CHANDU976/AI-Multimodal-Device-Control-System-.git
-cd AI-Multimodal-Device-Control-System-
+cd AI_Multimodal_Device_Control_System
 
 # [Add installation steps here]
 # Example:
