@@ -68,6 +68,8 @@ A Laptop/Desktop Control System Which used Speech, Hand gestures and User Contex
 ### Setup Instructions
 
 ```bash
+# Install Git LFS before you clone the repository
+# run "git init", "git lfs install" then clone repo
 # Clone the repository
 git clone https://github.com/CHANDU976/AI-Multimodal-Device-Control-System-.git
 cd AI_Multimodal_Device_Control_System
