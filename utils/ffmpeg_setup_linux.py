@@ -12,7 +12,7 @@ def add_ffmpeg_to_path():
         base_path = sys._MEIPASS   # PyInstaller temp dir
     else:
         base_path = os.path.dirname(os.path.abspath(__file__))
-
+    base_path = os.path.dirname(base_path)  # Move up one level to MyApp
     ffmpeg_bin = os.path.join(base_path, "Tools", "FFMPEG", "ffmpeg-8.0.1-essentials_build", "bin")
     os.chmod(os.path.join(ffmpeg_bin, "ffmpeg"), 0o755)
 
