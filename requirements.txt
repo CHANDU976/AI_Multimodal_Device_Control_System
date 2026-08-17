@@ -1,0 +1,52 @@
+# Speech module dependencies — verified working set.
+#
+# REQUIRES PYTHON 3.8 - 3.11.  Not 3.12/3.13: DeepFilterNet's native library
+# (DeepFilterLib) only publishes wheels for cp38-cp311, and DeepFilterNet pins
+# numpy<2, which the rest of the stack must therefore respect.
+#
+#   Windows :  py -3.11 -m venv .venv  &&  .venv\Scripts\python -m pip install -r requirements.txt
+#   Linux   :  python3.11 -m venv .venv  &&  .venv/bin/python -m pip install -r requirements.txt
+#   macOS   :  python3.11 -m venv .venv  &&  .venv/bin/python -m pip install -r requirements.txt
+#
+# Then:  python fetch_deepfilternet_model.py     # populates Models/DFN3
+#
+# See README.md for the OS-specific system packages (PortAudio, Git LFS).
+
+# CPU-only torch for Windows/Linux. Ignored on macOS, which has no +cpu variant.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# numpy<2 is a hard constraint from DeepFilterLib's compiled extension —
+# numpy 2 changed the C ABI it was built against.
+numpy==1.26.4
+
+# ── torch / torchaudio ────────────────────────────────────────────────────────
+# torchaudio is not declared by DeepFilterNet but df.io imports it at load time.
+#
+# Windows + Linux: explicit CPU-only builds from the PyTorch index.
+torch==2.13.0+cpu ; sys_platform != "darwin"
+torchaudio==2.11.0+cpu ; sys_platform != "darwin"
+
+# macOS Apple Silicon: PyTorch publishes no "+cpu" variant; the PyPI wheels are
+# already native arm64. torch 2.13's wheel is macosx_14_0 — on macOS 13 or
+# older, drop both pins to `torch==2.2.2` / `torchaudio==2.2.2`.
+torch==2.13.0 ; sys_platform == "darwin" and platform_machine == "arm64"
+torchaudio==2.11.0 ; sys_platform == "darwin" and platform_machine == "arm64"
+
+# macOS Intel: PyTorch stopped building x86_64 wheels after 2.2.2, so Intel
+# Macs are pinned to that release. Everything else here still works.
+torch==2.2.2 ; sys_platform == "darwin" and platform_machine == "x86_64"
+torchaudio==2.2.2 ; sys_platform == "darwin" and platform_machine == "x86_64"
+
+# ── speech stack ──────────────────────────────────────────────────────────────
+deepfilternet==0.5.6            # DFN3 denoiser (pulls DeepFilterLib)
+openai-whisper==20250625        # dictation transcription
+
+# vosk 0.3.45 shipped no macOS wheel; 0.3.44 is universal2 (Intel + Apple Silicon).
+vosk==0.3.45 ; sys_platform != "darwin"
+vosk==0.3.44 ; sys_platform == "darwin"
+
+# ── audio I/O ─────────────────────────────────────────────────────────────────
+sounddevice==0.5.5              # microphone capture (needs PortAudio on Linux)
+soxr==1.1.0                     # 48k -> 16k resampling
+soundfile==0.14.0               # wav dumps in the smoke-tests
+librosa==0.11.0                 # WhisperEngine's fallback resampler

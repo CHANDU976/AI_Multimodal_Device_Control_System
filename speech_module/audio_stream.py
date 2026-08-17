@@ -13,18 +13,44 @@ import threading
 import logging
 from typing import Callable
 
-import sounddevice as sd
 import numpy as np
 
 from config import AUDIO, CONCURRENCY
 
 logger = logging.getLogger(__name__)
 
+# sounddevice is imported on first use, not at module import — see _sounddevice().
+_sd = None
+
+
+def _sounddevice():
+    """
+    Import sounddevice lazily so PortAudio is only initialised in processes
+    that actually record.
+
+    On Windows, multiprocessing spawn makes every child re-import the __main__
+    module. When speech_manager.py is the entry point that pulls in this
+    module, so the Whisper worker — which never touches a microphone — would
+    otherwise enumerate audio devices on startup. That enumeration can stall
+    for seconds or hang outright when a headset is plugged in, and the worker
+    then never reaches its READY signal, freezing SpeechManager.start().
+    """
+    global _sd
+    if _sd is None:
+        import sounddevice
+        _sd = sounddevice
+    return _sd
+
 
 class AudioStream:
     """
     Opens a microphone input stream and feeds raw int16 PCM chunks
-    into `chunk_queue` for downstream consumers (VOSK, Whisper, etc.).
+    into `chunk_queue` for downstream consumers (DFN3, VOSK, Whisper, etc.).
+
+    Captures at AUDIO["capture_rate"] (48 kHz — DeepFilterNet3's native rate),
+    *not* at the 16 kHz the recognisers want. Downsampling happens per-branch
+    in audio_utils.StreamResampler / resample_int16, so the denoiser gets the
+    full-band signal it was trained on.
 
     Usage
     -----
@@ -36,7 +62,7 @@ class AudioStream:
 
     def __init__(
         self,
-        sample_rate: int = AUDIO["sample_rate"],
+        sample_rate: int = AUDIO["capture_rate"],
         channels: int = AUDIO["channels"],
         chunk_size: int = AUDIO["chunk_size"],
         device_index: int | None = AUDIO["device_index"],
@@ -62,6 +88,7 @@ class AudioStream:
             logger.warning("AudioStream is already running.")
             return
 
+        sd = _sounddevice()
         self._stream = sd.RawInputStream(
             samplerate=self.sample_rate,
             blocksize=self.chunk_size,
@@ -145,7 +172,7 @@ class AudioStream:
 
 def list_input_devices() -> list[dict]:
     """Return a list of available audio input devices for diagnostics."""
-    devices = sd.query_devices()
+    devices = _sounddevice().query_devices()
     return [
         {"index": i, "name": d["name"], "channels": d["max_input_channels"]}
         for i, d in enumerate(devices)

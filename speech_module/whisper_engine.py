@@ -207,7 +207,7 @@ class WhisperEngine:
     def __init__(
         self,
         model_key: str = WHISPER_DEFAULT_MODEL,
-        sample_rate: int = AUDIO["sample_rate"],
+        sample_rate: int = AUDIO["target_rate"],
         options: dict | None = None,
     ) -> None:
         if model_key not in WHISPER_MODELS:
@@ -273,6 +273,14 @@ class WhisperEngine:
         logger.info("WhisperEngine worker started (PID %d).", self._worker.pid)
 
         if wait_for_ready:
+            # Loading a 145 MB checkpoint in a freshly spawned interpreter takes
+            # a few seconds, longer on a cold file cache. Say so — an unexplained
+            # silent pause here reads as a hang and invites a Ctrl+C.
+            logger.info(
+                "Waiting for Whisper '%s' to load in the worker process "
+                "(a few seconds; up to %.0fs on first run) …",
+                self.model_key, ready_timeout,
+            )
             try:
                 signal = self._result_q.get(timeout=ready_timeout)
             except Exception:
@@ -339,12 +347,17 @@ class WhisperEngine:
 class DictationBuffer:
     """
     Accumulates raw PCM chunks during dictation mode and returns a single
-    numpy array ready for Whisper when silence is detected.
+    numpy array when silence is detected.
+
+    This is the HLD's "Buffer Voiced Audio" box, so it holds audio at the
+    *capture* rate (48 kHz) — DFN3 runs on this buffer before anything is
+    downsampled for Whisper. The RMS gate below is the frame-level VAD that
+    decides when the utterance has ended.
     """
 
     def __init__(
         self,
-        sample_rate: int = AUDIO["sample_rate"],
+        sample_rate: int = AUDIO["capture_rate"],
         silence_timeout_s: float = WHISPER_CFG["silence_timeout_s"],
         silence_threshold: float = 300.0,   # RMS amplitude (int16 scale)
     ) -> None:
@@ -391,9 +404,14 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 
     from audio_stream import AudioStream
+    from audio_utils import resample_int16
+    from denoiser import DeepFilterDenoiser
 
     print(f"Model  : {WHISPER_MODELS[WHISPER_DEFAULT_MODEL]}")
     print(f"Fallback download: {WHISPER_FALLBACK_DOWNLOAD}\n")
+
+    denoiser = DeepFilterDenoiser()
+    denoiser.load()
 
     engine = WhisperEngine()        # default = base.pt
     engine.start(wait_for_ready=True)
@@ -402,7 +420,7 @@ if __name__ == "__main__":
     buf = DictationBuffer()
     with AudioStream() as stream:
         count = 0
-        target = 5 * (AUDIO["sample_rate"] // AUDIO["chunk_size"])
+        target = 5 * (AUDIO["capture_rate"] // AUDIO["chunk_size"])
         while count < target:
             chunk = stream.chunk_queue.get()
             if chunk is None:
@@ -410,8 +428,12 @@ if __name__ == "__main__":
             buf.feed(chunk)
             count += 1
 
+    # Same path the manager uses: buffer @48k → DFN3 @48k → downsample → Whisper
     audio_np = buf.to_numpy()
-    print(f"Transcribing {len(audio_np) / AUDIO['sample_rate']:.1f}s …")
+    print(f"Transcribing {len(audio_np) / AUDIO['capture_rate']:.1f}s "
+          f"(denoise={'on' if denoiser.available else 'off'}) …")
+    audio_np = denoiser.enhance_int16(audio_np)
+    audio_np = resample_int16(audio_np, AUDIO["capture_rate"], AUDIO["target_rate"])
     result = engine.transcribe(audio_np)
     print("Result:", result)
     engine.stop()

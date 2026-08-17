@@ -20,6 +20,7 @@ from typing import Callable
 
 import vosk
 
+from audio_utils import StreamResampler
 from config import AUDIO, VOSK as VOSK_CFG, VOSK_MODELS, VOSK_DEFAULT_LANG, EVENT_TYPE
 
 logger = logging.getLogger(__name__)
@@ -34,9 +35,48 @@ class VoskResult:
     is_final: bool
     raw: dict = field(default_factory=dict)
 
+    # Populated for final results only. Confidences are VOSK's per-word 0..1
+    # values, which exist only when max_alternatives == 0 — see config.VOSK.
+    words: list[dict] = field(default_factory=list)
+    mean_confidence: float = 0.0
+    min_confidence: float = 0.0
+    duration_s: float = 0.0
+
+    @property
+    def word_count(self) -> int:
+        return len(self.text.split())
+
     def __repr__(self) -> str:
         tag = "FINAL" if self.is_final else "partial"
-        return f"VoskResult({tag}: {self.text!r})"
+        if not self.is_final:
+            return f"VoskResult({tag}: {self.text!r})"
+        return (f"VoskResult(FINAL: {self.text!r}  "
+                f"conf={self.mean_confidence:.2f}/min {self.min_confidence:.2f}  "
+                f"{self.duration_s:.1f}s)")
+
+
+def parse_final(raw: dict, duration_s: float = 0.0) -> VoskResult:
+    """
+    Build a VoskResult from VOSK's final-result JSON.
+
+    Expects the max_alternatives == 0 schema: {"text": ..., "result": [{word,
+    conf, start, end}, ...]}. If "result" is absent (older VOSK, or SetWords
+    off) confidences fall back to 1.0 so routing stays permissive rather than
+    escalating everything to Whisper.
+    """
+    text = (raw.get("text") or "").strip()
+    words = raw.get("result") or []
+    confs = [float(w["conf"]) for w in words if "conf" in w]
+    return VoskResult(
+        event=EVENT_TYPE["command"],
+        text=text,
+        is_final=True,
+        raw=raw,
+        words=words,
+        mean_confidence=float(sum(confs) / len(confs)) if confs else (1.0 if text else 0.0),
+        min_confidence=min(confs) if confs else (1.0 if text else 0.0),
+        duration_s=duration_s,
+    )
 
 
 # ── Engine ─────────────────────────────────────────────────────────────────────
@@ -56,6 +96,11 @@ class VoskEngine:
         Alternative to result_callback — results are put() here.
     model_path : str
         Path to the VOSK model directory.
+    input_rate : int
+        Rate of the chunks arriving on `audio_queue` (mic capture rate).
+    sample_rate : int
+        Rate the recogniser runs at. Chunks are resampled from `input_rate`
+        to this before AcceptWaveform().
     """
 
     def __init__(
@@ -64,13 +109,25 @@ class VoskEngine:
         result_callback: Callable[[VoskResult], None] | None = None,
         result_queue: queue.Queue | None = None,
         model_path: str = VOSK_MODELS[VOSK_DEFAULT_LANG],
-        sample_rate: int = AUDIO["sample_rate"],
+        sample_rate: int = AUDIO["target_rate"],
+        input_rate: int = AUDIO["capture_rate"],
+        partials_only: bool = False,
     ) -> None:
         self.audio_queue = audio_queue
         self.result_callback = result_callback
         self.result_queue = result_queue
         self.model_path = model_path
         self.sample_rate = sample_rate
+        self.input_rate = input_rate
+        # Preview mode: emit partials for live feedback and drop finals, which
+        # recognize_segment() produces more accurately from denoised audio.
+        self.partials_only = partials_only
+
+        # One long-lived resampler for the whole session — see StreamResampler
+        # docstring for why this must not be per-chunk.
+        self._resampler = StreamResampler(
+            in_rate=input_rate, out_rate=sample_rate, channels=AUDIO["channels"]
+        )
 
         self._model: vosk.Model | None = None
         self._recognizer: vosk.KaldiRecognizer | None = None
@@ -93,6 +150,7 @@ class VoskEngine:
         """Spin up the recognizer thread."""
         if self._model is None:
             self.load_model()
+        self._resampler.reset()
         self._running.set()
         self._thread = threading.Thread(
             target=self._recognition_loop,
@@ -114,6 +172,39 @@ class VoskEngine:
     def is_running(self) -> bool:
         return self._running.is_set()
 
+    # ── Segment recognition (the authoritative path) ───────────────────────────
+
+    def recognize_segment(self, pcm16: "np.ndarray | bytes") -> VoskResult:
+        """
+        Decode one complete utterance and return a final result with
+        confidences. Thread-safe with respect to the streaming loop, which
+        uses its own recognizer.
+
+        A fresh KaldiRecognizer per segment is deliberate: it starts from a
+        clean decoder state so a previous utterance cannot bias this one, and
+        it costs only a few MB.
+
+        Parameters
+        ----------
+        pcm16 : np.ndarray[int16] | bytes
+            Audio already at self.sample_rate (16 kHz) — i.e. denoised and
+            downsampled by the caller.
+        """
+        if self._model is None:
+            self.load_model()
+
+        data = pcm16.tobytes() if hasattr(pcm16, "tobytes") else pcm16
+        duration_s = len(data) / 2 / self.sample_rate
+
+        rec = vosk.KaldiRecognizer(self._model, self.sample_rate)
+        rec.SetMaxAlternatives(VOSK_CFG["max_alternatives"])
+        rec.SetWords(True)
+        rec.AcceptWaveform(data)
+        raw = json.loads(rec.FinalResult())
+        result = parse_final(raw, duration_s=duration_s)
+        logger.debug("Segment recognised: %r", result)
+        return result
+
     # ── Recognition loop ───────────────────────────────────────────────────────
 
     def _recognition_loop(self) -> None:
@@ -128,18 +219,21 @@ class VoskEngine:
             if chunk is None:           # sentinel → exit
                 break
 
+            # Downsample capture_rate → recogniser rate (HLD: "Downsample→16k")
+            chunk = self._resampler.process(chunk)
+            if not chunk:               # resampler still filling its filter
+                continue
+
             # Feed chunk to recognizer
             if self._recognizer.AcceptWaveform(chunk):
-                # Final result for this utterance
-                raw = json.loads(self._recognizer.Result())
-                text = raw.get("text", "").strip()
-                if text:
-                    result = VoskResult(
-                        event=EVENT_TYPE["command"],
-                        text=text,
-                        is_final=True,
-                        raw=raw,
-                    )
+                # Final result for this utterance. In preview mode these are
+                # dropped — the authoritative decode happens per VAD segment on
+                # denoised audio via recognize_segment().
+                if self.partials_only:
+                    self._recognizer.Result()      # consume, discard
+                    continue
+                result = parse_final(json.loads(self._recognizer.Result()))
+                if result.text:
                     self._emit(result)
             else:
                 # Partial result (still speaking)
