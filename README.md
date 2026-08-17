@@ -154,28 +154,16 @@ Models/
   WHISPER/     base.pt, tiny.pt
 ```
 
-### 5. FFmpeg (not needed for the live pipeline)
+### 5. FFmpeg — not needed
 
-Whisper's own docs list ffmpeg as required, and for its documented usage it is —
-`whisper clip.mp3` on the CLI and `model.transcribe("clip.wav")` both go through
-`whisper.load_audio()`, which shells out to the `ffmpeg` binary.
+Whisper's docs list ffmpeg as required, but only `whisper.load_audio()` (file-path
+input) shells out to it. This pipeline hands `WhisperEngine.transcribe()` a numpy
+array of already-decoded mic PCM, so ffmpeg is never invoked. Verified: the full
+pipeline transcribes successfully on a machine with no ffmpeg on PATH.
 
-**This pipeline never takes that path.** `WhisperEngine.transcribe()` is handed a
-numpy array of already-decoded mic PCM, and `log_mel_spectrogram()` only calls
-`load_audio()` when its input is a *string path*. Verified: the full pipeline
-transcribes successfully on a machine with no ffmpeg on PATH.
-
-So install it when you want to transcribe **files** — evaluating accuracy against
-recorded test clips, for instance. `utils/ffmpeg_setup.py` is platform-aware and
-downloads a static build into `Tools/FFMPEG/` on first import (Windows, Linux,
-and both macOS architectures):
-
-```python
-import utils.ffmpeg_setup      # auto-configures PATH
-```
-
-Or use a system install (`winget install ffmpeg` / `sudo apt install ffmpeg` /
-`brew install ffmpeg`).
+Only if you want to transcribe audio **files** (e.g., evaluating accuracy against
+recorded test clips), install it yourself: `winget install ffmpeg` /
+`sudo apt install ffmpeg` / `brew install ffmpeg`.
 
 ### 6. Verify
 
