@@ -73,12 +73,14 @@ class Router:
         max_command_words: int = ROUTING["max_command_words"],
         max_command_duration_s: float = ROUTING["max_command_duration_s"],
         escalate_on_empty: bool = ROUTING["escalate_on_empty"],
+        max_unk_ratio: float = ROUTING["max_unk_ratio"],
     ) -> None:
         self.min_word_confidence = min_word_confidence
         self.min_mean_confidence = min_mean_confidence
         self.max_command_words = max_command_words
         self.max_command_duration_s = max_command_duration_s
         self.escalate_on_empty = escalate_on_empty
+        self.max_unk_ratio = max_unk_ratio
         # Explicit override on top of the automatic policy: saying a configured
         # trigger phrase forces Whisper even for a short, confident utterance.
         self._classifier = Classifier()
@@ -96,6 +98,17 @@ class Router:
             if self.escalate_on_empty:
                 return Decision(EVENT_TYPE["dictation"], "vosk returned nothing", "")
             return Decision(EVENT_TYPE["command"], "empty, escalation disabled", "")
+
+        # ── Out-of-vocabulary speech (grammar decodes only) ────────────────────
+        # The grammar decoder maps anything outside the command vocabulary to
+        # [unk] — a stronger "this was not a command" signal than any
+        # confidence threshold, because it comes from the decoder itself.
+        if result.unk_count and result.unk_ratio > self.max_unk_ratio:
+            return Decision(
+                EVENT_TYPE["dictation"],
+                f"{result.unk_count}/{len(result.words)} words OOV",
+                text,
+            )
 
         # ── Too long to be a command ───────────────────────────────────────────
         if result.word_count > self.max_command_words:

@@ -111,12 +111,51 @@ class AudioStream:
         if not self._running.is_set():
             return
         self._running.clear()
+        self._close_stream()
+        self.chunk_queue.put(None)   # sentinel — tells consumers to exit
+        logger.info("AudioStream stopped.")
+
+    _KEEP = object()   # restart(): "leave device_index as it is"
+
+    def restart(self, device_index: int | None | object = _KEEP) -> None:
+        """
+        Reopen the capture stream, re-initialising PortAudio in between so the
+        reopened stream sees the current device world — this is how a change
+        of the system default input device is actually picked up.
+
+        Unlike stop(), no None sentinel is pushed: downstream consumers
+        (VAD, preview recognizer) just see a short gap in the chunk stream
+        and keep running.
+
+        Parameters
+        ----------
+        device_index : int | None, optional
+            New device to capture from; None = system default. Omitted =
+            keep the current setting.
+        """
+        was_running = self._running.is_set()
+        self._running.clear()
+        self._close_stream()
+        if device_index is not self._KEEP:
+            self.device_index = device_index
+
+        # Fresh PortAudio state. Safe here: this process holds no open
+        # streams between _close_stream() and start().
+        sd = _sounddevice()
+        try:
+            sd._terminate()
+            sd._initialize()
+        except Exception as exc:
+            logger.warning("PortAudio re-init failed (%s) — reopening anyway.", exc)
+
+        if was_running:
+            self.start()
+
+    def _close_stream(self) -> None:
         if self._stream:
             self._stream.stop()
             self._stream.close()
             self._stream = None
-        self.chunk_queue.put(None)   # sentinel — tells consumers to exit
-        logger.info("AudioStream stopped.")
 
     def is_running(self) -> bool:
         return self._running.is_set()

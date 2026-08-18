@@ -42,6 +42,11 @@ class VoskResult:
     min_confidence: float = 0.0
     duration_s: float = 0.0
 
+    # Grammar decodes only: how much of the utterance fell outside the command
+    # vocabulary. Free decodes never produce [unk], so these stay 0 there.
+    unk_count: int = 0
+    unk_ratio: float = 0.0
+
     @property
     def word_count(self) -> int:
         return len(self.text.split())
@@ -63,10 +68,21 @@ def parse_final(raw: dict, duration_s: float = 0.0) -> VoskResult:
     conf, start, end}, ...]}. If "result" is absent (older VOSK, or SetWords
     off) confidences fall back to 1.0 so routing stays permissive rather than
     escalating everything to Whisper.
+
+    [unk] tokens (grammar decodes) are counted in unk_count/unk_ratio but
+    excluded from both the text and the confidence aggregates: a breath or a
+    keyboard click mapping to one low-confidence [unk] should not put a
+    literal "[unk]" in a command or drag min_confidence below threshold —
+    whether the OOV share matters is the router's call, via unk_ratio.
     """
-    text = (raw.get("text") or "").strip()
     words = raw.get("result") or []
-    confs = [float(w["conf"]) for w in words if "conf" in w]
+    real_words = [w for w in words if w.get("word") != "[unk]"]
+    unk_count = len(words) - len(real_words)
+    if unk_count:
+        text = " ".join(w["word"] for w in real_words)
+    else:
+        text = (raw.get("text") or "").strip()
+    confs = [float(w["conf"]) for w in real_words if "conf" in w]
     return VoskResult(
         event=EVENT_TYPE["command"],
         text=text,
@@ -76,6 +92,8 @@ def parse_final(raw: dict, duration_s: float = 0.0) -> VoskResult:
         mean_confidence=float(sum(confs) / len(confs)) if confs else (1.0 if text else 0.0),
         min_confidence=min(confs) if confs else (1.0 if text else 0.0),
         duration_s=duration_s,
+        unk_count=unk_count,
+        unk_ratio=unk_count / len(words) if words else 0.0,
     )
 
 
@@ -134,6 +152,17 @@ class VoskEngine:
         self._thread: threading.Thread | None = None
         self._running = threading.Event()
 
+        # None = untested. Set on first grammar decode: small VOSK models carry
+        # the dynamic graph runtime grammars need, but not every model does.
+        self._grammar_ok: bool | None = None
+
+        # Segment recognizer cache. Building a grammar recognizer makes Kaldi
+        # re-log every vocabulary word the model lacks, so build once and
+        # Reset() between utterances instead of constructing per segment.
+        self._seg_lock = threading.Lock()
+        self._seg_rec: vosk.KaldiRecognizer | None = None
+        self._seg_grammar: list[str] | None = None
+
     # ── Public API ─────────────────────────────────────────────────────────────
 
     def load_model(self) -> None:
@@ -141,9 +170,7 @@ class VoskEngine:
         vosk.SetLogLevel(VOSK_CFG["log_level"])
         logger.info("Loading VOSK model from: %s", self.model_path)
         self._model = vosk.Model(self.model_path)
-        self._recognizer = vosk.KaldiRecognizer(self._model, self.sample_rate)
-        self._recognizer.SetMaxAlternatives(VOSK_CFG["max_alternatives"])
-        self._recognizer.SetWords(True)
+        self._recognizer = self._make_recognizer()   # streaming preview: no grammar
         logger.info("VOSK model loaded.")
 
     def start(self) -> None:
@@ -172,23 +199,80 @@ class VoskEngine:
     def is_running(self) -> bool:
         return self._running.is_set()
 
+    def switch_model(self, model_path: str) -> None:
+        """
+        Hot-swap to a different VOSK model (language change) without stopping
+        the streaming loop. The new model is fully loaded before the swap, so
+        recognition keeps running on the old one until the moment of exchange;
+        an utterance in flight on the streaming recognizer at that moment is
+        simply restarted from silence. Safe because both swapped references are
+        single assignments and recognize_segment() builds recognizers fresh.
+        """
+        if model_path == self.model_path and self._model is not None:
+            return
+        logger.info("Switching VOSK model to: %s", model_path)
+        model = vosk.Model(model_path)
+        with self._seg_lock:
+            self.model_path = model_path
+            self._grammar_ok = None                    # re-probe on the new model
+            self._model = model
+            self._seg_rec = None                       # rebuilt on next segment
+            self._recognizer = self._make_recognizer() # streaming preview: no grammar
+        logger.info("VOSK model switched.")
+
     # ── Segment recognition (the authoritative path) ───────────────────────────
 
-    def recognize_segment(self, pcm16: "np.ndarray | bytes") -> VoskResult:
+    def _make_recognizer(self, grammar: list[str] | None = None) -> vosk.KaldiRecognizer:
+        """
+        Build a recognizer, grammar-constrained when one is given and the
+        model supports it. The first grammar attempt doubles as the probe:
+        models without a dynamic graph raise, we log once and permanently
+        fall back to free decoding.
+        """
+        if grammar and self._grammar_ok is not False:
+            try:
+                rec = vosk.KaldiRecognizer(
+                    self._model, self.sample_rate,
+                    json.dumps(grammar, ensure_ascii=False),
+                )
+                self._grammar_ok = True
+            except Exception as exc:
+                self._grammar_ok = False
+                logger.warning(
+                    "Model %s rejected the runtime grammar (%s) — "
+                    "command decodes fall back to free recognition.",
+                    self.model_path, exc,
+                )
+                rec = vosk.KaldiRecognizer(self._model, self.sample_rate)
+        else:
+            rec = vosk.KaldiRecognizer(self._model, self.sample_rate)
+        rec.SetMaxAlternatives(VOSK_CFG["max_alternatives"])
+        rec.SetWords(True)
+        return rec
+
+    def recognize_segment(
+        self,
+        pcm16: "np.ndarray | bytes",
+        grammar: list[str] | None = None,
+    ) -> VoskResult:
         """
         Decode one complete utterance and return a final result with
         confidences. Thread-safe with respect to the streaming loop, which
         uses its own recognizer.
 
-        A fresh KaldiRecognizer per segment is deliberate: it starts from a
-        clean decoder state so a previous utterance cannot bias this one, and
-        it costs only a few MB.
+        The segment recognizer is cached and Reset() between utterances —
+        equivalent to a fresh decoder each time, without re-triggering
+        Kaldi's vocabulary warnings on every grammar build.
 
         Parameters
         ----------
         pcm16 : np.ndarray[int16] | bytes
             Audio already at self.sample_rate (16 kHz) — i.e. denoised and
             downsampled by the caller.
+        grammar : list[str], optional
+            Phrase list restricting the decode to a command vocabulary (see
+            config.command_grammar()). Include "[unk]" so OOV speech shows up
+            as [unk] tokens; the router escalates on those.
         """
         if self._model is None:
             self.load_model()
@@ -196,11 +280,16 @@ class VoskEngine:
         data = pcm16.tobytes() if hasattr(pcm16, "tobytes") else pcm16
         duration_s = len(data) / 2 / self.sample_rate
 
-        rec = vosk.KaldiRecognizer(self._model, self.sample_rate)
-        rec.SetMaxAlternatives(VOSK_CFG["max_alternatives"])
-        rec.SetWords(True)
-        rec.AcceptWaveform(data)
-        raw = json.loads(rec.FinalResult())
+        with self._seg_lock:
+            if self._seg_rec is None or self._seg_grammar != grammar:
+                self._seg_rec = self._make_recognizer(grammar)
+                self._seg_grammar = list(grammar) if grammar else None
+            else:
+                # Reused recognizer: back to a clean decoder state, so the
+                # previous utterance cannot bias this one.
+                self._seg_rec.Reset()
+            self._seg_rec.AcceptWaveform(data)
+            raw = json.loads(self._seg_rec.FinalResult())
         result = parse_final(raw, duration_s=duration_s)
         logger.debug("Segment recognised: %r", result)
         return result

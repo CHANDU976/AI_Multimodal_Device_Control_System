@@ -39,7 +39,7 @@ torchaudio==2.2.2 ; sys_platform == "darwin" and platform_machine == "x86_64"
 
 # ── speech stack ──────────────────────────────────────────────────────────────
 deepfilternet==0.5.6            # DFN3 denoiser (pulls DeepFilterLib)
-openai-whisper==20250625        # dictation transcription
+faster-whisper==1.2.1           # dictation transcription (CTranslate2, no torch)
 
 # vosk 0.3.45 shipped no macOS wheel; 0.3.44 is universal2 (Intel + Apple Silicon).
 vosk==0.3.45 ; sys_platform != "darwin"

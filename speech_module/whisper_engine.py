@@ -1,15 +1,15 @@
 """
 whisper_engine.py
-Runs OpenAI Whisper in a separate process to avoid blocking the VOSK
-real-time loop with heavy model inference.
+Runs Whisper (via faster-whisper / CTranslate2) in a separate process to
+avoid blocking the VOSK real-time loop with heavy model inference.
 
 Person B — Dictation + Intelligence Layer
 
 Model loading priority
 ----------------------
-1. Load from local .pt file  (e.g. models/whisper/base.pt)
-2. If file missing and WHISPER_FALLBACK_DOWNLOAD=True → download from OpenAI
-3. If file missing and WHISPER_FALLBACK_DOWNLOAD=False → raise FileNotFoundError
+1. Load from local CTranslate2 model dir  (e.g. Models/WHISPER/faster-whisper-small)
+2. If dir missing and WHISPER_FALLBACK_DOWNLOAD=True → download from Hugging Face
+3. If dir missing and WHISPER_FALLBACK_DOWNLOAD=False → raise FileNotFoundError
 """
 
 from __future__ import annotations
@@ -22,7 +22,6 @@ import time
 from dataclasses import dataclass
 
 import numpy as np
-import whisper
 
 from config import (
     WHISPER as WHISPER_CFG,
@@ -61,44 +60,53 @@ class WhisperResult:
 
 # ── Model loader (used inside child process) ───────────────────────────────────
 
-def _load_whisper_model(model_path: str, model_key: str, allow_download: bool):
+def _load_whisper_model(model_path: str, model_key: str, allow_download: bool,
+                        device: str, compute_type: str):
     """
-    Load Whisper preferring the local .pt file.
+    Load faster-whisper preferring the local CTranslate2 model directory.
 
     Parameters
     ----------
     model_path : str
-        Path to the local .pt file (e.g. models/whisper/base.pt).
+        Path to the local model dir (e.g. Models/WHISPER/faster-whisper-small),
+        holding model.bin + config.json + tokenizer.json + vocabulary.txt.
     model_key : str
-        Whisper size name ('base', 'tiny', ...) used as fallback download key.
+        Whisper size name ('base', 'small', ...) used as fallback download key.
     allow_download : bool
-        If True and the file is missing, download from OpenAI CDN.
+        If True and the dir is missing, download from Hugging Face.
+    device : str
+        'cpu' or 'cuda'.
+    compute_type : str
+        CTranslate2 quantisation — 'int8' on CPU, 'float16' on GPU.
 
     Raises
     ------
     FileNotFoundError
-        If the file is missing and allow_download is False.
+        If the dir is missing and allow_download is False.
     """
-    import warnings
-    warnings.filterwarnings("ignore", message="FP16 is not supported on CPU")
+    from faster_whisper import WhisperModel   # deferred: only the worker pays for it
 
-    if os.path.isfile(model_path):
+    if os.path.isdir(model_path):
         logger.info("[WhisperWorker] Loading local model: %s", model_path)
-        return whisper.load_model(model_path)
+        return WhisperModel(model_path, device=device, compute_type=compute_type)
 
-    # ── File not found ─────────────────────────────────────────────────────────
+    # ── Directory not found ────────────────────────────────────────────────────
     if allow_download:
         logger.warning(
-            "[WhisperWorker] '%s' not found — downloading '%s' from OpenAI "
+            "[WhisperWorker] '%s' not found — downloading '%s' from Hugging Face "
             "(this may take a while).",
             model_path,
             model_key,
         )
-        return whisper.load_model(model_key)   # saves to ~/.cache/whisper
+        return WhisperModel(
+            model_key, device=device, compute_type=compute_type,
+            download_root=os.path.dirname(model_path),
+        )
 
     raise FileNotFoundError(
         f"Whisper model not found at '{model_path}'. "
-        f"Either place {model_key}.pt there or set WHISPER_FALLBACK_DOWNLOAD=True in config.py."
+        f"Either place the faster-whisper-{model_key} model dir there or set "
+        f"WHISPER_FALLBACK_DOWNLOAD=True in config.py."
     )
 
 
@@ -117,7 +125,11 @@ def _whisper_worker(
     transcription requests until it receives the _SHUTDOWN sentinel.
     """
     try:
-        model = _load_whisper_model(model_path, model_key, allow_download)
+        model = _load_whisper_model(
+            model_path, model_key, allow_download,
+            device=options.get("device", "cpu"),
+            compute_type=options.get("compute_type", "int8"),
+        )
     except Exception as exc:
         result_q.put(WhisperResult(
             text="", language="", segments=[],
@@ -136,7 +148,7 @@ def _whisper_worker(
             logger.info("[WhisperWorker] Shutdown signal received.")
             break
 
-        audio_np, sample_rate = item
+        audio_np, sample_rate, language = item
         audio_float = audio_np.astype(np.float32) / 32768.0    # int16 → [-1, 1] float
 
         # Resample if needed (Whisper requires 16 kHz)
@@ -155,20 +167,28 @@ def _whisper_worker(
 
         t0 = time.perf_counter()
         try:
-            raw = model.transcribe(
+            # transcribe() returns a lazy generator — decoding happens as the
+            # segments are consumed, so the list() below is the actual work.
+            segments_gen, info = model.transcribe(
                 audio_float,
-                language=options.get("language", "en"),
+                language=language or options.get("language", "en"),
                 task=options.get("task", "transcribe"),
-                fp16=options.get("fp16", False),
                 temperature=options.get("temperature", 0.0),
                 beam_size=options.get("beam_size", 5),
                 best_of=options.get("best_of", 5),
                 condition_on_previous_text=options.get("condition_on_previous_text", True),
             )
+            segments = [
+                {
+                    "id": s.id, "start": s.start, "end": s.end, "text": s.text,
+                    "avg_logprob": s.avg_logprob, "no_speech_prob": s.no_speech_prob,
+                }
+                for s in segments_gen
+            ]
             result = WhisperResult(
-                text=raw["text"].strip(),
-                language=raw.get("language", ""),
-                segments=raw.get("segments", []),
+                text=" ".join(s["text"].strip() for s in segments).strip(),
+                language=info.language,
+                segments=segments,
                 duration_s=time.perf_counter() - t0,
             )
         except Exception as exc:
@@ -191,8 +211,8 @@ class WhisperEngine:
     Parameters
     ----------
     model_key : str
-        Key into WHISPER_MODELS in config.py — 'base' or 'tiny'.
-        Defaults to WHISPER_DEFAULT_MODEL ('base').
+        Key into WHISPER_MODELS in config.py — 'base' or 'small'.
+        Defaults to WHISPER_DEFAULT_MODEL ('small').
     sample_rate : int
         Sample rate of audio passed to transcribe(). 16000 is preferred.
     options : dict, optional
@@ -200,8 +220,8 @@ class WhisperEngine:
 
     Examples
     --------
-    engine = WhisperEngine()              # uses models/whisper/base.pt
-    engine = WhisperEngine("tiny")        # uses models/whisper/tiny.pt
+    engine = WhisperEngine()              # uses Models/WHISPER/faster-whisper-small
+    engine = WhisperEngine("base")        # uses Models/WHISPER/faster-whisper-base
     """
 
     def __init__(
@@ -221,7 +241,7 @@ class WhisperEngine:
         self.options = options or {
             k: WHISPER_CFG[k]
             for k in (
-                "language", "task", "fp16",
+                "language", "task", "device", "compute_type",
                 "temperature", "beam_size", "best_of",
                 "condition_on_previous_text",
             )
@@ -273,8 +293,9 @@ class WhisperEngine:
         logger.info("WhisperEngine worker started (PID %d).", self._worker.pid)
 
         if wait_for_ready:
-            # Loading a 145 MB checkpoint in a freshly spawned interpreter takes
-            # a few seconds, longer on a cold file cache. Say so — an unexplained
+            # Loading the fp16 weights (145 MB base / 484 MB small) and
+            # quantising to int8 in a freshly spawned interpreter takes a few
+            # seconds, longer on a cold file cache. Say so — an unexplained
             # silent pause here reads as a hang and invites a Ctrl+C.
             logger.info(
                 "Waiting for Whisper '%s' to load in the worker process "
@@ -312,6 +333,7 @@ class WhisperEngine:
         self,
         audio: np.ndarray,
         timeout: float = CONCURRENCY["whisper_process_timeout"],
+        language: str | None = None,
     ) -> WhisperResult:
         """
         Send a numpy int16 audio array to the worker and block until done.
@@ -322,11 +344,14 @@ class WhisperEngine:
             Raw PCM audio buffer at self.sample_rate Hz.
         timeout : float
             Seconds to wait before raising TimeoutError.
+        language : str, optional
+            Per-request override of the configured language (e.g. after a
+            runtime language switch) — 'en', 'hi', ….
         """
         if self._request_q is None or self._result_q is None:
             raise RuntimeError("WhisperEngine is not started. Call start() first.")
 
-        self._request_q.put((audio, self.sample_rate))
+        self._request_q.put((audio, self.sample_rate, language))
         try:
             return self._result_q.get(timeout=timeout)
         except Exception:
@@ -413,27 +438,35 @@ if __name__ == "__main__":
     denoiser = DeepFilterDenoiser()
     denoiser.load()
 
-    engine = WhisperEngine()        # default = base.pt
+    engine = WhisperEngine()        # default = faster-whisper-small
     engine.start(wait_for_ready=True)
 
-    print("Recording 5 seconds of audio …")
-    buf = DictationBuffer()
-    with AudioStream() as stream:
-        count = 0
-        target = 5 * (AUDIO["capture_rate"] // AUDIO["chunk_size"])
-        while count < target:
-            chunk = stream.chunk_queue.get()
-            if chunk is None:
-                break
-            buf.feed(chunk)
-            count += 1
+    while True:
+        print('press Y to continue anything else to quit..')
+        user_choice = input().strip()
+        if user_choice.lower() != "y":
+            print("Exiting.")
+            break
+        
+        buf = DictationBuffer()
+        with AudioStream() as stream:
+            print("Recording 7 seconds of audio …")
+            count = 0
+            target = 7 * (AUDIO["capture_rate"] // AUDIO["chunk_size"])
+            while count < target:
+                chunk = stream.chunk_queue.get()
+                if chunk is None:
+                    break
+                buf.feed(chunk)
+                count += 1
+    
+        # Same path the manager uses: buffer @48k → DFN3 @48k → downsample → Whisper
+        audio_np = buf.to_numpy()
+        print(f"Transcribing {len(audio_np) / AUDIO['capture_rate']:.1f}s "
+              f"(denoise={'on' if denoiser.available else 'off'}) …")
+        audio_np = denoiser.enhance_int16(audio_np)
+        audio_np = resample_int16(audio_np, AUDIO["capture_rate"], AUDIO["target_rate"])
+        result = engine.transcribe(audio_np)
+        print("Result:", result)
 
-    # Same path the manager uses: buffer @48k → DFN3 @48k → downsample → Whisper
-    audio_np = buf.to_numpy()
-    print(f"Transcribing {len(audio_np) / AUDIO['capture_rate']:.1f}s "
-          f"(denoise={'on' if denoiser.available else 'off'}) …")
-    audio_np = denoiser.enhance_int16(audio_np)
-    audio_np = resample_int16(audio_np, AUDIO["capture_rate"], AUDIO["target_rate"])
-    result = engine.transcribe(audio_np)
-    print("Result:", result)
     engine.stop()

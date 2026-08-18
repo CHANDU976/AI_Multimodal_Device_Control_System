@@ -1,9 +1,19 @@
 """
 vad.py
-Energy-based voice activity detection — the segmenter at the head of the
-speech pipeline.
+Voice activity detection — the segmenter at the head of the speech pipeline.
 
-    Mic (48k) → EnergyVAD → voiced segment → DFN3 → VOSK → command | Whisper
+    Mic (48k) → VAD → voiced segment → DFN3 → VOSK → command | Whisper
+
+Two implementations behind one interface (create_vad() picks at runtime):
+
+  SileroVAD  — preferred. A ~2 MB neural model (onnxruntime, sub-ms per
+               frame) that scores *speech probability*, so keyboard clatter,
+               music and coughs that clear an energy threshold do not open a
+               segment. Fewer false segments = fewer wasted VOSK/Whisper
+               decodes and less garbage sent to the central module.
+  EnergyVAD  — adaptive-threshold RMS gate. Zero extra dependencies; the
+               fallback when the Silero model can't load, the same way DFN3
+               degrades to pass-through.
 
 Why segments rather than a chunk stream
 ---------------------------------------
@@ -30,11 +40,13 @@ import path_setup  # noqa: F401 — adds project root to sys.path
 
 import collections
 import logging
+import time
 from dataclasses import dataclass
 
 import numpy as np
 
-from config import AUDIO, VAD as VAD_CFG
+from audio_utils import StreamResampler
+from config import AUDIO, SILERO as SILERO_CFG, VAD as VAD_CFG
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +59,14 @@ class Segment:
     peak_rms: float
     noise_floor: float
     truncated: bool = False     # hit max_segment_s rather than ending naturally
+    # Wall-clock epoch seconds of the segment's first sample (preroll included),
+    # derived as close-time minus duration — so it can lag true onset by any
+    # queueing delay ahead of the VAD. Word offsets from the recognisers are
+    # relative to this, letting the central module place words on its timeline.
+    wall_start: float = 0.0
+    # SileroVAD only: mean speech probability over the voiced frames.
+    # 0.0 = segment came from EnergyVAD, which has no such notion.
+    speech_prob: float = 0.0
 
     def __repr__(self) -> str:
         return (f"Segment({self.duration_s:.2f}s  peak_rms={self.peak_rms:.0f}  "
@@ -213,12 +233,14 @@ class EnergyVAD:
 
     def _close_segment(self, truncated: bool) -> Segment:
         pcm = np.concatenate(self._buffer) if self._buffer else np.zeros(0, np.int16)
+        duration_s = len(pcm) / self.sample_rate
         seg = Segment(
             pcm=pcm,
-            duration_s=len(pcm) / self.sample_rate,
+            duration_s=duration_s,
             peak_rms=self._peak_rms,
             noise_floor=self.noise_floor,
             truncated=truncated,
+            wall_start=time.time() - duration_s,
         )
         self._reset_segment()
         logger.debug("VAD: %r", seg)
@@ -231,6 +253,231 @@ class EnergyVAD:
         self._peak_rms = 0.0
         self._buffer = []
         self._preroll.clear()
+
+
+# ── Silero VAD ─────────────────────────────────────────────────────────────────
+
+class SileroVAD:
+    """
+    Neural VAD with EnergyVAD's exact interface: feed 48 kHz int16 chunks,
+    get a Segment (still at 48 kHz, preroll included) when one completes.
+
+    The model scores 512-sample frames of 16 kHz audio (32 ms), so the chunk
+    stream is resampled down for *scoring only* — segment audio is cut from
+    the original 48 kHz stream, which is what DFN3 wants. The two streams
+    stay aligned frame-for-frame (one 512-sample frame ↔ 1536 capture
+    samples); the resampler's few-ms filter delay shifts boundaries slightly,
+    absorbed by preroll and hangover.
+
+    Supports both Silero ONNX generations, detected from the session inputs:
+    v5 ('input'/'state'/'sr') and v6 ('input'/'h'/'c'). Both take 64 samples
+    of carried context + 512 new samples per call.
+    """
+
+    _FRAME16 = 512      # model frame @ 16 kHz
+    _CONTEXT = 64       # carried tail samples the model expects prepended
+
+    def __init__(
+        self,
+        sample_rate: int = AUDIO["capture_rate"],
+        model_path: str = SILERO_CFG["model_path"],
+        start_prob: float = SILERO_CFG["start_prob"],
+        end_prob: float = SILERO_CFG["end_prob"],
+        min_speech_ms: int = SILERO_CFG["min_speech_ms"],
+        hangover_ms: int = SILERO_CFG["hangover_ms"],
+        preroll_ms: int = SILERO_CFG["preroll_ms"],
+        max_segment_s: float = SILERO_CFG["max_segment_s"],
+    ) -> None:
+        import onnxruntime  # deferred: EnergyVAD users don't need it
+
+        if sample_rate % 16000:
+            raise ValueError(f"sample_rate {sample_rate} not a multiple of 16 kHz")
+        self.sample_rate = sample_rate
+        self.frame_in = self._FRAME16 * (sample_rate // 16000)   # 1536 @ 48 kHz
+
+        frame_ms = 32
+        self._min_speech_frames = max(1, int(min_speech_ms / frame_ms))
+        self._hangover_frames = max(1, int(hangover_ms / frame_ms))
+        self._max_frames = int(max_segment_s * 1000 / frame_ms)
+        self._preroll: collections.deque[np.ndarray] = collections.deque(
+            maxlen=max(1, int(preroll_ms / frame_ms))
+        )
+        self.start_prob = start_prob
+        self.end_prob = end_prob
+
+        opts = onnxruntime.SessionOptions()
+        opts.inter_op_num_threads = 1
+        opts.intra_op_num_threads = 1
+        opts.log_severity_level = 3
+        self._sess = onnxruntime.InferenceSession(
+            model_path, providers=["CPUExecutionProvider"], sess_options=opts
+        )
+        inputs = {i.name for i in self._sess.get_inputs()}
+        if {"input", "state", "sr"} <= inputs:
+            self._layout = "v5"
+        elif {"input", "h", "c"} <= inputs:
+            self._layout = "v6"
+        else:
+            raise RuntimeError(f"Unrecognised Silero ONNX inputs: {sorted(inputs)}")
+
+        self._resampler = StreamResampler(in_rate=sample_rate, out_rate=16000)
+        self._fifo16 = np.zeros(0, dtype=np.float32)
+        self._fifo48 = np.zeros(0, dtype=np.int16)
+        self._reset_model_state()
+        self._reset_segment()
+        logger.info("SileroVAD ready (%s layout, %s).", self._layout, model_path)
+
+    # ── Public API (mirrors EnergyVAD) ─────────────────────────────────────────
+
+    @property
+    def noise_floor(self) -> float:
+        """Interface parity with EnergyVAD — probabilities have no floor."""
+        return 0.0
+
+    @property
+    def in_speech(self) -> bool:
+        return self._in_speech
+
+    def feed(self, chunk: bytes | np.ndarray) -> Segment | None:
+        """Process one PCM chunk. Returns a Segment when one just completed."""
+        samples = (np.frombuffer(chunk, dtype=np.int16)
+                   if isinstance(chunk, (bytes, bytearray)) else chunk)
+        if samples.size == 0:
+            return None
+
+        self._fifo48 = np.concatenate((self._fifo48, samples))
+        res16 = np.frombuffer(self._resampler.process(samples.tobytes()), dtype=np.int16)
+        if res16.size:
+            self._fifo16 = np.concatenate(
+                (self._fifo16, res16.astype(np.float32) / 32768.0)
+            )
+
+        completed: Segment | None = None
+        while self._fifo16.size >= self._FRAME16 and self._fifo48.size >= self.frame_in:
+            frame16, self._fifo16 = self._fifo16[:self._FRAME16], self._fifo16[self._FRAME16:]
+            frame48, self._fifo48 = self._fifo48[:self.frame_in], self._fifo48[self.frame_in:]
+            seg = self._process_frame(frame16, frame48)
+            if seg is not None:
+                completed = seg
+        return completed
+
+    def flush(self) -> Segment | None:
+        """Close any in-progress segment — call when the stream ends."""
+        if self._in_speech and self._voiced_frames >= self._min_speech_frames:
+            return self._close_segment(truncated=False)
+        self._reset_segment()
+        return None
+
+    def reset(self) -> None:
+        """Drop all state, including the model's recurrent memory."""
+        self._resampler.reset()
+        self._fifo16 = np.zeros(0, dtype=np.float32)
+        self._fifo48 = np.zeros(0, dtype=np.int16)
+        self._preroll.clear()
+        self._reset_model_state()
+        self._reset_segment()
+
+    # ── Internals ──────────────────────────────────────────────────────────────
+
+    def _reset_model_state(self) -> None:
+        self._context = np.zeros(self._CONTEXT, dtype=np.float32)
+        self._state = np.zeros((2, 1, 128), dtype=np.float32)     # v5
+        self._h = np.zeros((1, 1, 128), dtype=np.float32)         # v6
+        self._c = np.zeros((1, 1, 128), dtype=np.float32)
+
+    def _speech_prob(self, frame16: np.ndarray) -> float:
+        x = np.concatenate((self._context, frame16))[np.newaxis, :]
+        if self._layout == "v5":
+            out, self._state = self._sess.run(
+                None, {"input": x, "state": self._state,
+                       "sr": np.array(16000, dtype=np.int64)},
+            )
+        else:
+            out, self._h, self._c = self._sess.run(
+                None, {"input": x, "h": self._h, "c": self._c},
+            )
+        self._context = frame16[-self._CONTEXT:]
+        return float(out.reshape(-1)[0])
+
+    def _process_frame(self, frame16: np.ndarray, frame48: np.ndarray) -> Segment | None:
+        prob = self._speech_prob(frame16)
+
+        if not self._in_speech:
+            self._preroll.append(frame48)
+            if prob >= self.start_prob:
+                self._in_speech = True
+                self._voiced_frames = 1
+                self._silence_frames = 0
+                self._prob_sum = prob
+                self._peak_rms = EnergyVAD._rms(frame48)
+                # Pre-roll (current frame included) so the onset consonant —
+                # spoken before the probability crossed — is not clipped.
+                self._buffer = list(self._preroll)
+            return None
+
+        # ── in speech ──────────────────────────────────────────────────────────
+        self._buffer.append(frame48)
+        self._peak_rms = max(self._peak_rms, EnergyVAD._rms(frame48))
+
+        if prob > self.end_prob:
+            self._voiced_frames += 1
+            self._silence_frames = 0
+            self._prob_sum += prob
+        else:
+            self._silence_frames += 1
+
+        if len(self._buffer) >= self._max_frames:
+            logger.warning("SileroVAD: segment hit max_segment_s — forcing a cut.")
+            return self._close_segment(truncated=True)
+
+        if self._silence_frames >= self._hangover_frames:
+            if self._voiced_frames >= self._min_speech_frames:
+                return self._close_segment(truncated=False)
+            logger.debug("SileroVAD: discarded %d-frame blip.", self._voiced_frames)
+            self._reset_segment()
+        return None
+
+    def _close_segment(self, truncated: bool) -> Segment:
+        pcm = np.concatenate(self._buffer) if self._buffer else np.zeros(0, np.int16)
+        duration_s = len(pcm) / self.sample_rate
+        seg = Segment(
+            pcm=pcm,
+            duration_s=duration_s,
+            peak_rms=self._peak_rms,
+            noise_floor=0.0,
+            truncated=truncated,
+            wall_start=time.time() - duration_s,
+            speech_prob=self._prob_sum / max(1, self._voiced_frames),
+        )
+        self._reset_segment()
+        logger.debug("SileroVAD: %r", seg)
+        return seg
+
+    def _reset_segment(self) -> None:
+        self._in_speech = False
+        self._voiced_frames = 0
+        self._silence_frames = 0
+        self._peak_rms = 0.0
+        self._prob_sum = 0.0
+        self._buffer: list[np.ndarray] = []
+        self._preroll.clear()
+
+
+# ── Factory ────────────────────────────────────────────────────────────────────
+
+def create_vad(sample_rate: int = AUDIO["capture_rate"]):
+    """
+    The segmenter the pipeline should use: SileroVAD when enabled and its
+    model loads, EnergyVAD otherwise (unless SILERO["required"]).
+    """
+    if SILERO_CFG["enabled"]:
+        try:
+            return SileroVAD(sample_rate=sample_rate)
+        except Exception as exc:
+            if SILERO_CFG["required"]:
+                raise
+            logger.warning("Silero VAD unavailable (%s) — using EnergyVAD.", exc)
+    return EnergyVAD(sample_rate=sample_rate)
 
 
 # ── Smoke-test ────────────────────────────────────────────────────────────────

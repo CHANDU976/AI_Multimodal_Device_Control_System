@@ -151,19 +151,16 @@ Expected layout:
 Models/
   DFN3/        config.ini, checkpoints/model_120.ckpt.best
   VOSK/        vosk-model-small-{en-in,en-us,hi}-*
-  WHISPER/     base.pt, tiny.pt
+  WHISPER/     faster-whisper-{base,small}/  (model.bin, config.json,
+               tokenizer.json, vocabulary.txt — CTranslate2 format)
 ```
 
 ### 5. FFmpeg — not needed
 
-Whisper's docs list ffmpeg as required, but only `whisper.load_audio()` (file-path
-input) shells out to it. This pipeline hands `WhisperEngine.transcribe()` a numpy
-array of already-decoded mic PCM, so ffmpeg is never invoked. Verified: the full
-pipeline transcribes successfully on a machine with no ffmpeg on PATH.
-
-Only if you want to transcribe audio **files** (e.g., evaluating accuracy against
-recorded test clips), install it yourself: `winget install ffmpeg` /
-`sudo apt install ffmpeg` / `brew install ffmpeg`.
+The dictation engine is faster-whisper, which never shells out to an ffmpeg
+binary. `WhisperEngine.transcribe()` is handed a numpy array of already-decoded
+mic PCM, and even file-path input would be decoded by PyAV, whose pip wheel
+bundles the ffmpeg libraries. No system ffmpeg install is required for anything.
 
 ### 6. Verify
 

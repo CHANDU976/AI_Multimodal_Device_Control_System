@@ -4,8 +4,11 @@ Main public API for the Speech Module.
 
 Pipeline
 --------
-    Mic (48k) → EnergyVAD → DFN3 → resample 16k → VOSK ─┬─ confident+short → COMMAND
-                                                        └─ long or unsure  → WHISPER
+    Mic (48k) → VAD → DFN3 → resample 16k → VOSK ─┬─ confident+short → COMMAND
+                                                  └─ long or unsure  → WHISPER
+
+The VAD is Silero (neural, speech-only triggering) with EnergyVAD as the
+automatic fallback — see vad.create_vad().
 
 Everything downstream of the VAD works on whole voiced segments rather than a
 chunk stream. That is not a compromise — it is what each stage wants:
@@ -31,7 +34,7 @@ Threading model
   Main thread           : start/stop; consumer calls .get_result() or gets callbacks
   AudioStream callback  : PortAudio thread → tees chunks to the VAD and preview queues
   VoskEngine thread     : preview partials only
-  _vad_thread           : chunks → EnergyVAD → segment queue
+  _vad_thread           : chunks → VAD → segment queue
   _process_thread       : segment → DFN3 → VOSK → route → maybe Whisper → events
   WhisperWorker process : long-lived; transcribes on demand
 
@@ -63,14 +66,18 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable
 
+from audio_devices import DeviceMonitor
 from audio_stream import AudioStream
 from audio_utils import resample_int16
 from denoiser import DeepFilterDenoiser
 from router import Router, Decision
-from vad import EnergyVAD, Segment
+from vad import Segment, create_vad
 from vosk_engine import VoskEngine, VoskResult
 from whisper_engine import WhisperEngine, WhisperResult
-from config import AUDIO, EVENT_TYPE, CONCURRENCY
+from config import (
+    AUDIO, EVENT_TYPE, CONCURRENCY, DEVICE_MONITOR, GRAMMAR, VOSK_MODELS,
+    WHISPER_LANG, command_grammar,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -156,12 +163,28 @@ class SpeechManager:
         self._vosk_engine: VoskEngine | None = None
         self._whisper_engine: WhisperEngine | None = None
         self._denoiser = DeepFilterDenoiser()
-        self._vad = EnergyVAD()
+        self._vad = create_vad()    # Silero if its model loads, energy fallback
         self._router = Router()
+
+        # Input-device tracking. While no device is explicitly chosen
+        # (device_index None) the capture stream follows the system default;
+        # set_input_device() pins a specific device and stops the following.
+        self._device_monitor: DeviceMonitor | None = None
+        self._follow_default = AUDIO["device_index"] is None
+        self._audio_lock = threading.Lock()   # serialises stream restarts vs stop()
 
         self._vad_thread: threading.Thread | None = None
         self._process_thread: threading.Thread | None = None
         self._running = threading.Event()
+
+        # Command-vocabulary grammar for the authoritative segment decode.
+        # None = free decoding (grammar disabled, or a language whose commands
+        # the English vocabulary can't cover).
+        self._grammar: list[str] | None = (
+            command_grammar() if GRAMMAR["enabled"] else None
+        )
+        # Per-request Whisper language override; None = config default.
+        self._whisper_language: str | None = None
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -213,6 +236,13 @@ class SpeechManager:
         if self._emit_partials:
             self._vosk_engine.start()
 
+        if DEVICE_MONITOR["enabled"]:
+            self._device_monitor = DeviceMonitor(
+                on_default_change=self._on_default_device_change,
+                on_list_change=self._on_device_list_change,
+            )
+            self._device_monitor.start()
+
         logger.info("SpeechManager ready.")
 
     def stop(self) -> None:
@@ -220,8 +250,13 @@ class SpeechManager:
         logger.info("SpeechManager stopping …")
         self._running.clear()
 
-        if self._audio_stream:
-            self._audio_stream.stop()
+        # Monitor first, so no device switch can restart the stream mid-stop.
+        if self._device_monitor:
+            self._device_monitor.stop()
+
+        with self._audio_lock:
+            if self._audio_stream:
+                self._audio_stream.stop()
         if self._vosk_engine and self._emit_partials:
             self._vosk_engine.stop()
 
@@ -249,6 +284,93 @@ class SpeechManager:
     def noise_floor(self) -> float:
         """Current VAD noise-floor estimate (int16 RMS) — useful for tuning."""
         return self._vad.noise_floor
+
+    def set_language(self, lang: str) -> None:
+        """
+        Switch both recognisers to another language at runtime — the
+        `set_language` control operation of the subprocess protocol.
+
+        Hot-swaps the VOSK model between segments and steers Whisper via a
+        per-request language override, so neither engine restarts. The English
+        command grammar is dropped for non-English languages (its words would
+        all be OOV in that model's lexicon) and restored on the way back.
+
+        Parameters
+        ----------
+        lang : str
+            A key of config.VOSK_MODELS — 'en-in', 'en-us', 'hi-in'.
+        """
+        if lang not in VOSK_MODELS:
+            raise ValueError(
+                f"Unknown language '{lang}'. Valid: {list(VOSK_MODELS.keys())}"
+            )
+        logger.info("Switching language to '%s' …", lang)
+        if self._vosk_engine is not None:
+            self._vosk_engine.switch_model(VOSK_MODELS[lang])
+        else:
+            self._vosk_model_path = VOSK_MODELS[lang]
+
+        self._whisper_language = WHISPER_LANG.get(lang)
+        use_grammar = GRAMMAR["enabled"] and (self._whisper_language or "en") == "en"
+        self._grammar = command_grammar() if use_grammar else None
+        logger.info("Language switched to '%s' (grammar %s).",
+                    lang, "on" if self._grammar else "off")
+
+    # ── Input devices ──────────────────────────────────────────────────────────
+
+    @property
+    def input_devices(self) -> list[dict]:
+        """
+        Latest snapshot of available input devices (refreshed every
+        DEVICE_MONITOR poll): [{index, name, hostapi, channels,
+        default_samplerate, is_default}, …]. The future device-picker UI
+        reads this and calls set_input_device() with an index from it.
+        """
+        return self._device_monitor.devices if self._device_monitor else []
+
+    def set_input_device(self, device_index: int | None) -> None:
+        """
+        Capture from a specific input device (index from `input_devices`),
+        or pass None to return to following the system default.
+        """
+        self._follow_default = device_index is None
+        with self._audio_lock:
+            if self._audio_stream and self._running.is_set():
+                self._audio_stream.restart(device_index=device_index)
+        logger.info(
+            "Input device %s.",
+            "following system default" if self._follow_default
+            else f"pinned to index {device_index}",
+        )
+
+    def _on_default_device_change(self, new_default: dict, devices: list[dict]) -> None:
+        """DeviceMonitor thread: system default input changed — follow it."""
+        if not self._follow_default:
+            logger.info("Default input changed but a device is pinned — ignoring.")
+            return
+        with self._audio_lock:
+            if not (self._audio_stream and self._running.is_set()):
+                return
+            # device_index stays None: the restart re-initialises PortAudio,
+            # so "default" now resolves to the new device.
+            self._audio_stream.restart()
+        self._emit(SpeechEvent(
+            event_type=EVENT_TYPE["device"],
+            text=new_default["name"],
+            source="audio",
+            mode=EVENT_TYPE["device"],
+            metadata={"reason": "default_changed", "device": new_default},
+        ))
+
+    def _on_device_list_change(self, devices: list[dict]) -> None:
+        """DeviceMonitor thread: a device appeared or disappeared."""
+        self._emit(SpeechEvent(
+            event_type=EVENT_TYPE["device"],
+            text="",
+            source="audio",
+            mode=EVENT_TYPE["device"],
+            metadata={"reason": "list_changed", "devices": devices},
+        ))
 
     # ── Preview partials (VoskEngine thread) ───────────────────────────────────
 
@@ -321,9 +443,9 @@ class SpeechManager:
         # 2. Downsample once; both recognisers consume this same buffer.
         clean16 = resample_int16(clean48, AUDIO["capture_rate"], AUDIO["target_rate"])
 
-        # 3. VOSK, with per-word confidences.
+        # 3. VOSK, with per-word confidences — grammar-constrained when enabled.
         t1 = time.perf_counter()
-        vosk_result = self._vosk_engine.recognize_segment(clean16)
+        vosk_result = self._vosk_engine.recognize_segment(clean16, grammar=self._grammar)
         t_vosk = time.perf_counter() - t1
 
         # 4. Route.
@@ -332,15 +454,24 @@ class SpeechManager:
 
         meta = {
             "denoised": self._denoiser.available,
+            # Epoch seconds of the segment's first sample. Word start/end
+            # offsets below are relative to this, so the central module can
+            # align words with gesture events on one timeline.
+            "segment_start": round(segment.wall_start, 3),
             "segment_s": round(segment.duration_s, 2),
             "noise_floor": round(segment.noise_floor, 1),
             "vosk_text": vosk_result.text,
+            **({"speech_prob": round(segment.speech_prob, 2)}
+               if segment.speech_prob else {}),
+            "words": vosk_result.words,     # [{word, start, end, conf}, …]
             "mean_confidence": round(vosk_result.mean_confidence, 3),
             "min_confidence": round(vosk_result.min_confidence, 3),
             "routing_reason": decision.reason,
             "denoise_s": round(t_denoise, 3),
             "vosk_s": round(t_vosk, 3),
         }
+        if vosk_result.unk_count:
+            meta["unk_count"] = vosk_result.unk_count
 
         if not decision.escalate:
             self._emit(SpeechEvent(
@@ -353,7 +484,9 @@ class SpeechManager:
         if self._whisper_engine is None:
             return
         t2 = time.perf_counter()
-        result: WhisperResult = self._whisper_engine.transcribe(clean16)
+        result: WhisperResult = self._whisper_engine.transcribe(
+            clean16, language=self._whisper_language,
+        )
         meta["whisper_s"] = round(time.perf_counter() - t2, 3)
 
         if result.success and result.text:

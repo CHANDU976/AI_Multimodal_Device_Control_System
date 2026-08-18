@@ -41,6 +41,7 @@
 *.ckpt.best filter=lfs diff=lfs merge=lfs -text
 *.int binary
 Models/WHISPER/**/model.bin filter=lfs diff=lfs merge=lfs -text
+Models/SILERO/** filter=lfs diff=lfs merge=lfs -text
 Tools/** filter=lfs diff=lfs merge=lfs -text
 # placeholder keeping the empty Tools/ dir in git — not a binary
 Tools/.gitkeep -filter -diff -merge text
