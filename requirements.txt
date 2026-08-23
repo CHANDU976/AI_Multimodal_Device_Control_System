@@ -45,6 +45,12 @@ faster-whisper==1.2.1           # dictation transcription (CTranslate2, no torch
 vosk==0.3.45 ; sys_platform != "darwin"
 vosk==0.3.44 ; sys_platform == "darwin"
 
+# ── central module / neural NLU ───────────────────────────────────────────────
+# DistilBERT joint intent+slot model (central_module/nlp/nlu). Training
+# downloads distilbert-base-uncased once; inference is fully offline from
+# Models/NLU. 4.46.x is the last line fully happy with numpy<2 + torch 2.x.
+transformers==4.46.3
+
 # ── audio I/O ─────────────────────────────────────────────────────────────────
 sounddevice==0.5.5              # microphone capture (needs PortAudio on Linux)
 soxr==1.1.0                     # 48k -> 16k resampling

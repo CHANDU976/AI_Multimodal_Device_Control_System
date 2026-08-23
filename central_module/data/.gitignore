@@ -1,0 +1,3 @@
+# User data (preferences.json, usage.json) stays out of git.
+*
+!.gitignore
