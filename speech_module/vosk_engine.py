@@ -20,6 +20,7 @@ from typing import Callable
 
 import vosk
 
+from audio_utils import StreamResampler
 from config import AUDIO, VOSK as VOSK_CFG, VOSK_MODELS, VOSK_DEFAULT_LANG, EVENT_TYPE
 
 logger = logging.getLogger(__name__)
@@ -34,9 +35,66 @@ class VoskResult:
     is_final: bool
     raw: dict = field(default_factory=dict)
 
+    # Populated for final results only. Confidences are VOSK's per-word 0..1
+    # values, which exist only when max_alternatives == 0 — see config.VOSK.
+    words: list[dict] = field(default_factory=list)
+    mean_confidence: float = 0.0
+    min_confidence: float = 0.0
+    duration_s: float = 0.0
+
+    # Grammar decodes only: how much of the utterance fell outside the command
+    # vocabulary. Free decodes never produce [unk], so these stay 0 there.
+    unk_count: int = 0
+    unk_ratio: float = 0.0
+
+    @property
+    def word_count(self) -> int:
+        return len(self.text.split())
+
     def __repr__(self) -> str:
         tag = "FINAL" if self.is_final else "partial"
-        return f"VoskResult({tag}: {self.text!r})"
+        if not self.is_final:
+            return f"VoskResult({tag}: {self.text!r})"
+        return (f"VoskResult(FINAL: {self.text!r}  "
+                f"conf={self.mean_confidence:.2f}/min {self.min_confidence:.2f}  "
+                f"{self.duration_s:.1f}s)")
+
+
+def parse_final(raw: dict, duration_s: float = 0.0) -> VoskResult:
+    """
+    Build a VoskResult from VOSK's final-result JSON.
+
+    Expects the max_alternatives == 0 schema: {"text": ..., "result": [{word,
+    conf, start, end}, ...]}. If "result" is absent (older VOSK, or SetWords
+    off) confidences fall back to 1.0 so routing stays permissive rather than
+    escalating everything to Whisper.
+
+    [unk] tokens (grammar decodes) are counted in unk_count/unk_ratio but
+    excluded from both the text and the confidence aggregates: a breath or a
+    keyboard click mapping to one low-confidence [unk] should not put a
+    literal "[unk]" in a command or drag min_confidence below threshold —
+    whether the OOV share matters is the router's call, via unk_ratio.
+    """
+    words = raw.get("result") or []
+    real_words = [w for w in words if w.get("word") != "[unk]"]
+    unk_count = len(words) - len(real_words)
+    if unk_count:
+        text = " ".join(w["word"] for w in real_words)
+    else:
+        text = (raw.get("text") or "").strip()
+    confs = [float(w["conf"]) for w in real_words if "conf" in w]
+    return VoskResult(
+        event=EVENT_TYPE["command"],
+        text=text,
+        is_final=True,
+        raw=raw,
+        words=words,
+        mean_confidence=float(sum(confs) / len(confs)) if confs else (1.0 if text else 0.0),
+        min_confidence=min(confs) if confs else (1.0 if text else 0.0),
+        duration_s=duration_s,
+        unk_count=unk_count,
+        unk_ratio=unk_count / len(words) if words else 0.0,
+    )
 
 
 # ── Engine ─────────────────────────────────────────────────────────────────────
@@ -56,6 +114,11 @@ class VoskEngine:
         Alternative to result_callback — results are put() here.
     model_path : str
         Path to the VOSK model directory.
+    input_rate : int
+        Rate of the chunks arriving on `audio_queue` (mic capture rate).
+    sample_rate : int
+        Rate the recogniser runs at. Chunks are resampled from `input_rate`
+        to this before AcceptWaveform().
     """
 
     def __init__(
@@ -64,18 +127,41 @@ class VoskEngine:
         result_callback: Callable[[VoskResult], None] | None = None,
         result_queue: queue.Queue | None = None,
         model_path: str = VOSK_MODELS[VOSK_DEFAULT_LANG],
-        sample_rate: int = AUDIO["sample_rate"],
+        sample_rate: int = AUDIO["target_rate"],
+        input_rate: int = AUDIO["capture_rate"],
+        partials_only: bool = False,
     ) -> None:
         self.audio_queue = audio_queue
         self.result_callback = result_callback
         self.result_queue = result_queue
         self.model_path = model_path
         self.sample_rate = sample_rate
+        self.input_rate = input_rate
+        # Preview mode: emit partials for live feedback and drop finals, which
+        # recognize_segment() produces more accurately from denoised audio.
+        self.partials_only = partials_only
+
+        # One long-lived resampler for the whole session — see StreamResampler
+        # docstring for why this must not be per-chunk.
+        self._resampler = StreamResampler(
+            in_rate=input_rate, out_rate=sample_rate, channels=AUDIO["channels"]
+        )
 
         self._model: vosk.Model | None = None
         self._recognizer: vosk.KaldiRecognizer | None = None
         self._thread: threading.Thread | None = None
         self._running = threading.Event()
+
+        # None = untested. Set on first grammar decode: small VOSK models carry
+        # the dynamic graph runtime grammars need, but not every model does.
+        self._grammar_ok: bool | None = None
+
+        # Segment recognizer cache. Building a grammar recognizer makes Kaldi
+        # re-log every vocabulary word the model lacks, so build once and
+        # Reset() between utterances instead of constructing per segment.
+        self._seg_lock = threading.Lock()
+        self._seg_rec: vosk.KaldiRecognizer | None = None
+        self._seg_grammar: list[str] | None = None
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -84,15 +170,14 @@ class VoskEngine:
         vosk.SetLogLevel(VOSK_CFG["log_level"])
         logger.info("Loading VOSK model from: %s", self.model_path)
         self._model = vosk.Model(self.model_path)
-        self._recognizer = vosk.KaldiRecognizer(self._model, self.sample_rate)
-        self._recognizer.SetMaxAlternatives(VOSK_CFG["max_alternatives"])
-        self._recognizer.SetWords(True)
+        self._recognizer = self._make_recognizer()   # streaming preview: no grammar
         logger.info("VOSK model loaded.")
 
     def start(self) -> None:
         """Spin up the recognizer thread."""
         if self._model is None:
             self.load_model()
+        self._resampler.reset()
         self._running.set()
         self._thread = threading.Thread(
             target=self._recognition_loop,
@@ -114,6 +199,101 @@ class VoskEngine:
     def is_running(self) -> bool:
         return self._running.is_set()
 
+    def switch_model(self, model_path: str) -> None:
+        """
+        Hot-swap to a different VOSK model (language change) without stopping
+        the streaming loop. The new model is fully loaded before the swap, so
+        recognition keeps running on the old one until the moment of exchange;
+        an utterance in flight on the streaming recognizer at that moment is
+        simply restarted from silence. Safe because both swapped references are
+        single assignments and recognize_segment() builds recognizers fresh.
+        """
+        if model_path == self.model_path and self._model is not None:
+            return
+        logger.info("Switching VOSK model to: %s", model_path)
+        model = vosk.Model(model_path)
+        with self._seg_lock:
+            self.model_path = model_path
+            self._grammar_ok = None                    # re-probe on the new model
+            self._model = model
+            self._seg_rec = None                       # rebuilt on next segment
+            self._recognizer = self._make_recognizer() # streaming preview: no grammar
+        logger.info("VOSK model switched.")
+
+    # ── Segment recognition (the authoritative path) ───────────────────────────
+
+    def _make_recognizer(self, grammar: list[str] | None = None) -> vosk.KaldiRecognizer:
+        """
+        Build a recognizer, grammar-constrained when one is given and the
+        model supports it. The first grammar attempt doubles as the probe:
+        models without a dynamic graph raise, we log once and permanently
+        fall back to free decoding.
+        """
+        if grammar and self._grammar_ok is not False:
+            try:
+                rec = vosk.KaldiRecognizer(
+                    self._model, self.sample_rate,
+                    json.dumps(grammar, ensure_ascii=False),
+                )
+                self._grammar_ok = True
+            except Exception as exc:
+                self._grammar_ok = False
+                logger.warning(
+                    "Model %s rejected the runtime grammar (%s) — "
+                    "command decodes fall back to free recognition.",
+                    self.model_path, exc,
+                )
+                rec = vosk.KaldiRecognizer(self._model, self.sample_rate)
+        else:
+            rec = vosk.KaldiRecognizer(self._model, self.sample_rate)
+        rec.SetMaxAlternatives(VOSK_CFG["max_alternatives"])
+        rec.SetWords(True)
+        return rec
+
+    def recognize_segment(
+        self,
+        pcm16: "np.ndarray | bytes",
+        grammar: list[str] | None = None,
+    ) -> VoskResult:
+        """
+        Decode one complete utterance and return a final result with
+        confidences. Thread-safe with respect to the streaming loop, which
+        uses its own recognizer.
+
+        The segment recognizer is cached and Reset() between utterances —
+        equivalent to a fresh decoder each time, without re-triggering
+        Kaldi's vocabulary warnings on every grammar build.
+
+        Parameters
+        ----------
+        pcm16 : np.ndarray[int16] | bytes
+            Audio already at self.sample_rate (16 kHz) — i.e. denoised and
+            downsampled by the caller.
+        grammar : list[str], optional
+            Phrase list restricting the decode to a command vocabulary (see
+            config.command_grammar()). Include "[unk]" so OOV speech shows up
+            as [unk] tokens; the router escalates on those.
+        """
+        if self._model is None:
+            self.load_model()
+
+        data = pcm16.tobytes() if hasattr(pcm16, "tobytes") else pcm16
+        duration_s = len(data) / 2 / self.sample_rate
+
+        with self._seg_lock:
+            if self._seg_rec is None or self._seg_grammar != grammar:
+                self._seg_rec = self._make_recognizer(grammar)
+                self._seg_grammar = list(grammar) if grammar else None
+            else:
+                # Reused recognizer: back to a clean decoder state, so the
+                # previous utterance cannot bias this one.
+                self._seg_rec.Reset()
+            self._seg_rec.AcceptWaveform(data)
+            raw = json.loads(self._seg_rec.FinalResult())
+        result = parse_final(raw, duration_s=duration_s)
+        logger.debug("Segment recognised: %r", result)
+        return result
+
     # ── Recognition loop ───────────────────────────────────────────────────────
 
     def _recognition_loop(self) -> None:
@@ -128,18 +308,21 @@ class VoskEngine:
             if chunk is None:           # sentinel → exit
                 break
 
+            # Downsample capture_rate → recogniser rate (HLD: "Downsample→16k")
+            chunk = self._resampler.process(chunk)
+            if not chunk:               # resampler still filling its filter
+                continue
+
             # Feed chunk to recognizer
             if self._recognizer.AcceptWaveform(chunk):
-                # Final result for this utterance
-                raw = json.loads(self._recognizer.Result())
-                text = raw.get("text", "").strip()
-                if text:
-                    result = VoskResult(
-                        event=EVENT_TYPE["command"],
-                        text=text,
-                        is_final=True,
-                        raw=raw,
-                    )
+                # Final result for this utterance. In preview mode these are
+                # dropped — the authoritative decode happens per VAD segment on
+                # denoised audio via recognize_segment().
+                if self.partials_only:
+                    self._recognizer.Result()      # consume, discard
+                    continue
+                result = parse_final(json.loads(self._recognizer.Result()))
+                if result.text:
                     self._emit(result)
             else:
                 # Partial result (still speaking)
