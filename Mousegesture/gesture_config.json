@@ -1,0 +1,56 @@
+{
+  "settings": {
+    "cursor_sensitivity": 1.4,
+    "is_mirrored": true,
+    "invert_cursor_x": false,
+    "ai_confidence": 0.6,
+    "target_screen": "Screen 1"
+  },
+  "geometry_bindings": [
+    {
+      "id": "r677645cd",
+      "trigger": "transition",
+      "action": "LEFT_CLICK",
+      "enabled": true,
+      "cooldown_sec": 0.35,
+      "from_state": "one",
+      "to_state": "fist",
+      "max_time_sec": 2.0,
+      "source": "any",
+      "hand": "any"
+    }
+  ],
+  "yolo_bindings": [],
+  "deleted_bindings": [
+    {
+      "id": "rf1dfef4e",
+      "trigger": "transition",
+      "action": "LEFT_CLICK",
+      "enabled": true,
+      "cooldown_sec": 0.16,
+      "from_state": "one",
+      "to_state": "fist",
+      "max_time_sec": 0.8,
+      "promote_double": true,
+      "name": "Left_Click",
+      "source": "any",
+      "hand": "any",
+      "_origin_index": 0,
+      "_deleted_at": 1787414303.340407
+    },
+    {
+      "id": "raf918c6f",
+      "trigger": "transition",
+      "action": "LEFT_CLICK",
+      "enabled": true,
+      "cooldown_sec": 0.0,
+      "from_state": "one",
+      "to_state": "fist",
+      "max_time_sec": 0.8,
+      "source": "any",
+      "hand": "any",
+      "_origin_index": 0,
+      "_deleted_at": 1787419593.8895276
+    }
+  ]
+}
