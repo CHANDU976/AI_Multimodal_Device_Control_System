@@ -102,7 +102,7 @@ Three design points worth calling out:
 | Central IPC         | JSON lines                  | `{"op":"set_language"\|"get_devices"\|"ping"}`          | stdin pipe                   |
 | `IntentEngine`    | Normalized utterance        | `IntentMatch(intent, slots, confidence)` or `None`  | in-process                   |
 | `ActionExecutor`  | `IntentMatch`             | `ActionResult(ok, message, needs_confirm)`            | in-process                   |
-| `OSAdapter`       | Primitive call              | OS event, or`ActionError` with a readable reason      | ctypes / osascript / xdotool |
+| `OSAdapter`       | Primitive call              | OS event, or `ActionError` with a readable reason      | ctypes / osascript / xdotool |
 | Gesture engine      | Camera frame                | Cursor position + fired action; optional gesture event  | stdout pipe                  |
 
 ## 🛠️ Technologies Used
@@ -331,7 +331,7 @@ Migrating these into `tests/` is named in Remaining Work below.
 | ------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Speech  | Every non-trivial file runs standalone     | `python speech_module/denoiser.py` records 5 s and writes before/after WAVs; `speech_manager.py` runs the full pipeline                                                                                                                                 |
 | Speech  | Routing thresholds calibrated, not guessed | `calibrate.py` decodes a folder of WAVs twice — free and grammar-constrained — and reports where the confidence distributions actually sit                                                                                                              |
-| Central | Every module has a`__main__` smoke test  | `python -m central_module.nlp.normalize`, `.intent_engine`, `.learning.adaptation`, `.supervisor` (spawns a deliberately flaky child), `.actions.windows_adapter`                                                                                 |
+| Central | Every module has a `__main__` smoke test  | `python -m central_module.nlp.normalize`, `.intent_engine`, `.learning.adaptation`, `.supervisor` (spawns a deliberately flaky child), `.actions.windows_adapter`                                                                                 |
 | Central | Full pipeline without hardware             | `--simulate --dry-run` types commands and reports what *would* happen; `--once "open chrome" --dry-run` runs one utterance end-to-end                                                                                                                 |
 | NLU     | Pipeline sanity · dataset integrity       | `train.py --quick` (40/intent, 1 epoch) — the artefact is marked untrusted so it cannot silently degrade the live system; `dataset.py` asserts tag/word alignment and `none`-class presence                                                          |
 | Gesture | FSM logic                                  | `python gesture_fsm.py` runs a scripted hand sequence including a stray frame and an unmapped intermediate pose, printing which actions fired                                                                                                             |
@@ -341,6 +341,14 @@ Migrating these into `tests/` is named in Remaining Work below.
 
 Reference hardware: RTX 3050 6 GB Laptop (driver 610.88, WDDM) · CUDA 12.1 / PyTorch 2.5.1+cu121
 · Windows 11 · Python 3.11.15. `[M]` = measured on that hardware.
+
+> **Note on the PyTorch version.** These numbers were collected on a **CUDA** build
+> (`2.5.1+cu121`), which is deliberately *not* what `requirements.txt` installs. The default
+> install is CPU-only (`torch 2.13.0+cpu`) so the stack works on machines with no NVIDIA GPU.
+> The GPU build only affects the **gesture** figures — the YOLO branch is the sole component that
+> uses CUDA. Speech and NLU numbers are CPU measurements and are unaffected. To reproduce the
+> gesture timings, install a matching CUDA build of torch over the pinned CPU one; on CPU the
+> semantic branch runs substantially slower, which is why the two branches are decoupled.
 
 **Speech + NLU**
 
@@ -359,7 +367,7 @@ Reference hardware: RTX 3050 6 GB Laptop (driver 610.88, WDDM) · CUDA 12.1 / Py
 
 | Metric                                | Baseline → Ours                                     | Δ                          |
 | ------------------------------------- | ---------------------------------------------------- | --------------------------- |
-| YOLO inference latency                | ONNX`cv2.dnn` 554.7 ms → Ultralytics + CUDA 55 ms | **10.1× faster** [M] |
+| YOLO inference latency                | ONNX `cv2.dnn` 554.7 ms → Ultralytics + CUDA 55 ms | **10.1× faster** [M] |
 | Semantic branch throughput            | 1.8 Hz → 18 Hz                                      | 10× [M]                    |
 | Frames dropped by queue               | 83 % (ONNX) → 27 % (by design)                      | −56 pts [M]                |
 | Gesture-induced cursor drift          | Fingertip 108 px → landmark-9 0.0 px                | eliminated [M]              |
@@ -458,12 +466,27 @@ cursor target when a slot value is deictic, plus a temporal window binding the t
 
 ## 📝 License
 
-All Rights Reserved (academic coursework).
+This repository is **not under a single licence**. Terms differ by component:
 
-Every bundled component is open-source with no licensed or paid parts: VOSK, the DistilBERT NLU
-base and MediaPipe Hands are Apache 2.0; faster-whisper, DeepFilterNet3 and Silero VAD are MIT.
-The one exception is our fine-tuned **YOLOv10n gesture detector, which inherits AGPL-3.0** from
-Ultralytics — that obligation carries into any redistribution of this repository.
+| Part | Terms |
+|---|---|
+| Our source code (`speech_module/`, `central_module/`, `Mousegesture/`) | All Rights Reserved — academic coursework, no redistribution licence granted |
+| Our fine-tuned **YOLOv10n gesture weights** (`Models/YOLO/`) | **AGPL-3.0**, inherited from Ultralytics |
+| Our fine-tuned **joint DistilBERT NLU weights** (`Models/NLU/`) | Apache 2.0, inherited from the DistilBERT base |
+| Third-party models — VOSK, MediaPipe Hands | Apache 2.0 |
+| Third-party models — faster-whisper, DeepFilterNet3, Silero VAD | MIT |
+| Third-party Python dependencies | Their own upstream licences (see `requirements.txt`) |
+
+No licensed or paid components are used anywhere in the stack.
+
+**The AGPL-3.0 weights are the constraint that matters.** Because the gesture detector is
+fine-tuned from Ultralytics YOLOv10n, redistributing this repository — or running it as a network
+service — triggers AGPL obligations for the parts that link against those weights. Anyone
+planning to release or deploy this beyond coursework should either honour AGPL-3.0 across the
+gesture pipeline or retrain the detector on a permissively licensed base.
+
+*No repo-level `LICENSE` file is committed yet; adding one, plus a `NOTICE` enumerating the
+table above, is tracked under Repo hygiene in Remaining Work.*
 
 ## 📧 Contact
 
