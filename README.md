@@ -343,12 +343,15 @@ Reference hardware: RTX 3050 6 GB Laptop (driver 610.88, WDDM) · CUDA 12.1 / Py
 · Windows 11 · Python 3.11.15. `[M]` = measured on that hardware.
 
 > **Note on the PyTorch version.** These numbers were collected on a **CUDA** build
-> (`2.5.1+cu121`), which is deliberately *not* what `requirements.txt` installs. The default
-> install is CPU-only (`torch 2.13.0+cpu`) so the stack works on machines with no NVIDIA GPU.
-> The GPU build only affects the **gesture** figures — the YOLO branch is the sole component that
-> uses CUDA. Speech and NLU numbers are CPU measurements and are unaffected. To reproduce the
-> gesture timings, install a matching CUDA build of torch over the pinned CPU one; on CPU the
-> semantic branch runs substantially slower, which is why the two branches are decoupled.
+> (`2.5.1+cu121`), which is deliberately *not* what `requirements.txt` installs. The pinned
+> install is non-CUDA on every platform, so the stack works on machines with no NVIDIA GPU —
+> `torch 2.13.0+cpu` on Windows and Linux, `2.13.0` on Apple Silicon (macOS has no `+cpu`
+> variant; the PyPI wheels are already native) and `2.2.2` on Intel Macs (see the platform
+> table above). The CUDA build only affects the **gesture** figures — the YOLO branch is the
+> sole component that uses it. Speech and NLU numbers are CPU measurements and are unaffected
+> on every platform. To reproduce the gesture timings on Windows or Linux, install a matching
+> CUDA build of torch over the pinned one; on CPU the semantic branch runs substantially
+> slower, which is why the two branches are decoupled in the first place.
 
 **Speech + NLU**
 
@@ -471,7 +474,7 @@ This repository is **not under a single licence**. Terms differ by component:
 | Part | Terms |
 |---|---|
 | Our source code (`speech_module/`, `central_module/`, `Mousegesture/`) | All Rights Reserved — academic coursework, no redistribution licence granted |
-| Our fine-tuned **YOLOv10n gesture weights** (`Models/YOLO/`) | **AGPL-3.0**, inherited from Ultralytics |
+| Our fine-tuned **YOLOv10n gesture weights** (`Mousegesture/model/YOLOv10n_gestures.pt`, and the `.onnx` export beside it) | **AGPL-3.0**, inherited from Ultralytics |
 | Our fine-tuned **joint DistilBERT NLU weights** (`Models/NLU/`) | Apache 2.0, inherited from the DistilBERT base |
 | Third-party models — VOSK, MediaPipe Hands | Apache 2.0 |
 | Third-party models — faster-whisper, DeepFilterNet3, Silero VAD | MIT |
