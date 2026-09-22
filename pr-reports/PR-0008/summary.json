@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "meta": {
+    "number": 8,
+    "title": "Bump the actions group with 6 updates",
+    "author": "dependabot[bot]",
+    "url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/pull/8",
+    "base_ref": "main",
+    "head_ref": "dependabot/github_actions/actions-95ba76a25c",
+    "event": "push",
+    "run_url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/actions/runs/35739284493",
+    "repository": "CHANDU976/AI_Multimodal_Device_Control_System",
+    "generated_at": "2026-09-22T14:19:22Z"
+  },
+  "range": {
+    "base": "aa6485466d84bd9fba37eadb7f479d7b56b3e1ac",
+    "head": "f8a55a539d88e42e0e44b39fa15c61fbdee77e7b",
+    "behind": 0
+  },
+  "verdict": "ready",
+  "verdict_reasons": [],
+  "totals": {
+    "files": 3,
+    "additions": 29,
+    "deletions": 29,
+    "commits": 1
+  },
+  "areas": {
+    "ci": {
+      "files": 3,
+      "additions": 29,
+      "deletions": 29
+    }
+  },
+  "tests": {
+    "tests": 4718,
+    "passed": 4620,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 86,
+    "xfailed": 12,
+    "suites": 4
+  },
+  "changed_line_coverage": null,
+  "attention": [
+    "CI/tooling changed"
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "areas": [
+    {
+      "area": "ci",
+      "title": "CI/CD & tooling",
+      "files": 3,
+      "additions": 29,
+      "deletions": 29,
+      "binary": 0,
+      "components": {
+        "workflows": 3
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "status": "M",
+      "additions": 26,
+      "deletions": 26,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": "workflows"
+    },
+    {
+      "path": ".github/workflows/labeler.yml",
+      "status": "M",
+      "additions": 1,
+      "deletions": 1,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": "workflows"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "status": "M",
+      "additions": 2,
+      "deletions": 2,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": "workflows"
+    }
+  ],
+  "collapsed": {},
+  "commits": [
+    {
+      "sha": "ba9257721095bdedcfcfbf213b135136bf1d648c",
+      "short": "ba92577",
+      "author": "dependabot[bot]",
+      "date": "2026-09-22",
+      "subject": "Bump the actions group with 6 updates"
+    }
+  ]
+}

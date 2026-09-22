@@ -1,6 +1,30 @@
 {
-  "generated_at": "2026-09-22T14:15:10Z",
+  "generated_at": "2026-09-22T14:19:41Z",
   "reports": [
+    {
+      "folder": "PR-0008",
+      "number": 8,
+      "title": "Bump the actions group with 6 updates",
+      "author": "dependabot[bot]",
+      "generated_at": "2026-09-22T14:19:22Z",
+      "verdict": "ready",
+      "files": 3,
+      "additions": 29,
+      "deletions": 29,
+      "tests": {
+        "tests": 4718,
+        "passed": 4620,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 86,
+        "xfailed": 12,
+        "suites": 4
+      },
+      "areas": [
+        "ci"
+      ],
+      "head": "f8a55a539d88e42e0e44b39fa15c61fbdee77e7b"
+    },
     {
       "folder": "PR-0007",
       "number": 7,

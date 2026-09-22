@@ -1,0 +1,199 @@
+{
+  "jobs": [
+    {
+      "job": "changes",
+      "title": "Change detection",
+      "result": "success"
+    },
+    {
+      "job": "lint",
+      "title": "Lint (blocking rules)",
+      "result": "success"
+    },
+    {
+      "job": "hygiene",
+      "title": "Repository hygiene",
+      "result": "success"
+    },
+    {
+      "job": "tests",
+      "title": "Tests (all platforms)",
+      "result": "success"
+    },
+    {
+      "job": "ml-tests",
+      "title": "NLU model tests (torch)",
+      "result": "success"
+    },
+    {
+      "job": "deps",
+      "title": "Dependency resolution",
+      "result": "skipped"
+    }
+  ],
+  "tests": [
+    {
+      "label": "tests-macos-latest",
+      "tests": 1564,
+      "passed": 1525,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 35,
+      "xfailed": 4,
+      "time": 17.2,
+      "failures": [],
+      "skip_reasons": {
+        "WindowsAdapter binds user32.dll at import": 31,
+        "collection skipped": 1,
+        "WindowsAdapter binds user32.dll": 1,
+        "real EnumDisplayMonitors": 1,
+        "could not import 'onnxruntime'": 1
+      },
+      "xfails": [
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[press_key:press the {key} key]",
+          "reason": "command_normalize drops 'the', so a non-text pattern containing it never matches"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:double click]",
+          "reason": "command_normalize turns 'double' into '2' before matching"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:click twice]",
+          "reason": "command_normalize turns 'twice' into '2' before matching"
+        },
+        {
+          "test": "tests.repo.test_fetch_deepfilternet_model::test_extract_blocks_sibling_prefix_traversal",
+          "reason": "zip-slip: the guard compares string prefixes, so '../DFN3evil/x' resolves to a SIBLING directory whose path still starts with '.../DFN3'. Compare with Path.is_relative_to(dest.resolve()) instead."
+        }
+      ]
+    },
+    {
+      "label": "ml",
+      "tests": 26,
+      "passed": 13,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 13,
+      "xfailed": 0,
+      "time": 8.7,
+      "failures": [],
+      "skip_reasons": {
+        "Models/NLU/joint-distilbert/joint_nlu.pt is a Git-LFS pointer (run `git lfs pull` to fetch it)": 13
+      },
+      "xfails": []
+    },
+    {
+      "label": "tests-ubuntu-latest",
+      "tests": 1564,
+      "passed": 1525,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 35,
+      "xfailed": 4,
+      "time": 19.0,
+      "failures": [],
+      "skip_reasons": {
+        "WindowsAdapter binds user32.dll at import": 31,
+        "collection skipped": 1,
+        "WindowsAdapter binds user32.dll": 1,
+        "real EnumDisplayMonitors": 1,
+        "could not import 'onnxruntime'": 1
+      },
+      "xfails": [
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[press_key:press the {key} key]",
+          "reason": "command_normalize drops 'the', so a non-text pattern containing it never matches"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:double click]",
+          "reason": "command_normalize turns 'double' into '2' before matching"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:click twice]",
+          "reason": "command_normalize turns 'twice' into '2' before matching"
+        },
+        {
+          "test": "tests.repo.test_fetch_deepfilternet_model::test_extract_blocks_sibling_prefix_traversal",
+          "reason": "zip-slip: the guard compares string prefixes, so '../DFN3evil/x' resolves to a SIBLING directory whose path still starts with '.../DFN3'. Compare with Path.is_relative_to(dest.resolve()) instead."
+        }
+      ]
+    },
+    {
+      "label": "tests-windows-latest",
+      "tests": 1564,
+      "passed": 1557,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 3,
+      "xfailed": 4,
+      "time": 31.3,
+      "failures": [],
+      "skip_reasons": {
+        "collection skipped": 1,
+        "checks the non-Windows guard": 1,
+        "could not import 'onnxruntime'": 1
+      },
+      "xfails": [
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[press_key:press the {key} key]",
+          "reason": "command_normalize drops 'the', so a non-text pattern containing it never matches"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:double click]",
+          "reason": "command_normalize turns 'double' into '2' before matching"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:click twice]",
+          "reason": "command_normalize turns 'twice' into '2' before matching"
+        },
+        {
+          "test": "tests.repo.test_fetch_deepfilternet_model::test_extract_blocks_sibling_prefix_traversal",
+          "reason": "zip-slip: the guard compares string prefixes, so '../DFN3evil/x' resolves to a SIBLING directory whose path still starts with '.../DFN3'. Compare with Path.is_relative_to(dest.resolve()) instead."
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "by_area": {
+      "central": {
+        "statements": 1862,
+        "covered": 1752,
+        "files": 28,
+        "percent": 94.1
+      },
+      "gesture": {
+        "statements": 5083,
+        "covered": 1931,
+        "files": 6,
+        "percent": 38.0
+      },
+      "speech": {
+        "statements": 1395,
+        "covered": 1260,
+        "files": 13,
+        "percent": 90.3
+      }
+    },
+    "changed_lines": {
+      "executable": 0,
+      "covered": 0,
+      "percent": null,
+      "files": []
+    }
+  },
+  "lint": {
+    "blocking": [],
+    "advisory_in_changed_files": [],
+    "advisory_new": [],
+    "advisory_total": 38,
+    "supplied": true
+  },
+  "hygiene": {
+    "base": "aa6485466d84bd9fba37eadb7f479d7b56b3e1ac",
+    "head": "f8a55a539d88e42e0e44b39fa15c61fbdee77e7b",
+    "files_checked": 3,
+    "errors": [],
+    "warnings": []
+  }
+}
