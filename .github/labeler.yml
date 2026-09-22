@@ -1,0 +1,45 @@
+# Area labels applied by .github/workflows/labeler.yml (actions/labeler v5).
+# Keep in step with the areas in scripts/ci/ci_common.py:classify().
+
+"area: central":
+  - changed-files:
+      - any-glob-to-any-file: ["central_module/**"]
+
+"area: speech":
+  - changed-files:
+      - any-glob-to-any-file: ["speech_module/**", "fetch_deepfilternet_model.py"]
+
+"area: gesture":
+  - changed-files:
+      - any-glob-to-any-file: ["Mousegesture/**"]
+
+"area: models":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Models/**"
+          - "Mousegesture/model/*.pt"
+          - "Mousegesture/model/*.onnx"
+
+"area: tests":
+  - changed-files:
+      - any-glob-to-any-file: ["tests/**"]
+
+"area: ci":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "scripts/**"
+          - "pyproject.toml"
+          - "requirements-test.txt"
+
+"dependencies":
+  - changed-files:
+      - any-glob-to-any-file: ["requirements.txt", "Mousegesture/others/requirements.txt"]
+
+"documentation":
+  - changed-files:
+      - any-glob-to-any-file: ["**/*.md", "docs/**", "Architecture_diagram/**"]
+
+"touches .venv":
+  - changed-files:
+      - any-glob-to-any-file: [".venv/**"]

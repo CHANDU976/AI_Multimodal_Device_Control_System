@@ -1,0 +1,463 @@
+# Continuous integration — see docs/ci-cd.md for the full description.
+#
+#   changes ──┬── lint ───────┐
+#             ├── hygiene ────┤
+#             ├── tests (OS×) ├──► gate      (the one required status check)
+#             ├── ml-tests ───┤
+#             └── deps (*) ───┴──► report    (read-only: builds the report artifact)
+#                                    ├──► comment (PR comment; writes, runs no PR code)
+#                                    └──► archive (pr-reports/ on main, after a merge)
+#   (*) only when a requirements file changed
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  # Superseded PR runs are cancelled; runs on main never are, so every merge
+  # gets its report archived.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PYTHON_VERSION: "3.11"
+  PYTHONUTF8: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_PROGRESS_BAR: "off"
+
+jobs:
+  # ── What is being tested, and against what ────────────────────────────────
+  changes:
+    name: Change detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      base: ${{ steps.range.outputs.base }}
+      head: ${{ steps.range.outputs.head }}
+      deps: ${{ steps.range.outputs.deps }}
+      dep-files: ${{ steps.range.outputs.dep-files }}
+      os-matrix: ${{ steps.range.outputs.os-matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: scripts
+      - id: range
+        name: Resolve base/head and affected areas
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          case "$EVENT" in
+            pull_request) base="$PR_BASE"; head="$PR_HEAD" ;;
+            push)         base="$BEFORE";  head="$GITHUB_SHA" ;;
+            *)            base="";         head="$GITHUB_SHA" ;;
+          esac
+          read -r base head < <(python3 -c 'import sys; sys.path.insert(0, "scripts/ci")
+          from ci_common import resolve_range
+          print(*resolve_range(sys.argv[1] or None, sys.argv[2]))' "$base" "$head")
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+
+          # Only the requirements files this range touches are re-resolved: a
+          # pin that rotted on PyPI is flagged by the PR that edits it, not by
+          # every PR that happens to edit some other requirements file.
+          dep_files=$(git diff --name-only "$base...$head" \
+                        | grep -E '(^|/)requirements[^/]*\.txt$' | tr '\n' ' ' || true)
+          echo "dep-files=$dep_files" >> "$GITHUB_OUTPUT"
+          if [ -n "$dep_files" ]; then
+            echo "deps=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deps=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # PRs run Linux + Windows (the verified platforms); main adds macOS.
+          if [ "$EVENT" = pull_request ]; then
+            echo 'os-matrix=["ubuntu-latest","windows-latest"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'os-matrix=["ubuntu-latest","windows-latest","macos-latest"]' >> "$GITHUB_OUTPUT"
+          fi
+          echo "Testing $head against $base"
+
+  # ── Static checks ─────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            .github
+            central_module
+            speech_module
+            Mousegesture
+            tests
+            scripts
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python -m pip install "$(grep -E '^ruff==' requirements-test.txt | cut -d' ' -f1)"
+      - name: Ruff — blocking rules (syntax errors, undefined names, redefinitions)
+        run: ruff check . --output-format=github
+      - name: actionlint — workflow syntax, expressions and embedded shell
+        if: always()
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color
+      - name: Ruff — JSON for the PR report (blocking + advisory rule sets)
+        if: always()
+        run: |
+          mkdir -p quality
+          ruff check . --output-format=json --exit-zero -o quality/lint-blocking.json
+          ruff check . --select E,W,F,B --output-format=json --exit-zero -o quality/lint-advisory.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-lint
+          path: quality/
+          retention-days: 14
+
+  hygiene:
+    name: Repository hygiene
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: scripts
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Conflict markers, JSON/Python validity, LFS, file sizes, secrets
+        env:
+          BASE: ${{ needs.changes.outputs.base }}
+          HEAD: ${{ needs.changes.outputs.head }}
+        run: >
+          python scripts/ci/repo_checks.py --base "$BASE" --head "$HEAD"
+          --json quality/hygiene.json --github
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-hygiene
+          path: quality/
+          retention-days: 14
+
+  # ── Tests ─────────────────────────────────────────────────────────────────
+  tests:
+    name: Tests (${{ matrix.os }})
+    needs: changes
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.changes.outputs.os-matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Sparse + blob-filtered: skips the ~30k-file committed .venv, and model
+      # weights arrive as Git LFS pointers (tests needing real weights skip).
+      - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            .github
+            central_module
+            speech_module
+            Mousegesture
+            Models
+            tests
+            scripts
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-test.txt
+      - run: python -m pip install -r requirements-test.txt
+      - name: pytest (everything except the torch-dependent NLU tests)
+        run: >
+          python -m pytest -m "not ml"
+          --junitxml="test-results/junit-tests-${{ matrix.os }}.xml"
+          --cov --cov-report="json:test-results/coverage-${{ matrix.os }}.json"
+          --cov-report=term-missing:skip-covered
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.os }}
+          path: test-results/
+          retention-days: 14
+
+  ml-tests:
+    name: NLU model tests (torch, CPU)
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          # Same tree as the tests job: pytest still collects (then deselects)
+          # every test module, and those import the speech/gesture sources.
+          sparse-checkout: |
+            .github
+            central_module
+            speech_module
+            Mousegesture
+            Models
+            tests
+            scripts
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements-test.txt
+            requirements.txt
+      - name: Install test deps + the torch/transformers pins from requirements.txt
+        run: |
+          python -m pip install -r requirements-test.txt
+          grep -E '^(--extra-index-url|torch==|transformers==)' requirements.txt > ml-requirements.txt
+          cat ml-requirements.txt
+          python -m pip install -r ml-requirements.txt
+      - name: pytest -m ml
+        run: >
+          python -m pytest -m ml
+          --junitxml=test-results/junit-ml.xml
+          --cov --cov-report=json:test-results/coverage-ml.json
+          --cov-report=term-missing:skip-covered
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-ml
+          path: test-results/
+          retention-days: 14
+
+  deps:
+    name: Dependencies resolve (${{ matrix.os }}, py${{ matrix.python }}, ${{ matrix.file }})
+    needs: changes
+    if: needs.changes.outputs.deps == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  python: "3.11", file: requirements.txt }
+          - { os: windows-latest, python: "3.11", file: requirements.txt }
+          - { os: macos-latest,   python: "3.11", file: requirements.txt }
+          # mediapipe 0.8.11 publishes wheels for Python <= 3.10 only.
+          - { os: ubuntu-latest,  python: "3.10", file: Mousegesture/others/requirements.txt }
+          - { os: windows-latest, python: "3.10", file: Mousegesture/others/requirements.txt }
+          - { os: ubuntu-latest,  python: "3.11", file: requirements-test.txt }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          sparse-checkout: Mousegesture/others
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: pip resolves every pin for this platform (nothing is installed)
+        shell: bash
+        env:
+          CHANGED: ${{ needs.changes.outputs.dep-files }}
+          FILE: ${{ matrix.file }}
+        run: |
+          case " $CHANGED " in
+            *" $FILE "*) python -m pip install --dry-run --ignore-installed -r "$FILE" ;;
+            *) echo "$FILE is unchanged in this range; not re-resolved." ;;
+          esac
+
+  # ── Merge decision ────────────────────────────────────────────────────────
+  gate:
+    name: CI gate
+    needs: [changes, lint, hygiene, tests, ml-tests, deps]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: All required checks passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'EOF'
+          import json, os, sys
+          needs = json.loads(os.environ["NEEDS"])
+          optional = {"deps"}                  # skipped when no requirements changed
+          bad = {name: info["result"] for name, info in needs.items()
+                 if info["result"] != "success"
+                 and not (name in optional and info["result"] == "skipped")}
+          for name, info in needs.items():
+              print(f"{name:10s} {info['result']}")
+          if bad:
+              sys.exit(f"::error::required checks did not pass: {bad}")
+          print("all required checks passed")
+          EOF
+
+  report:
+    name: PR report
+    needs: [changes, lint, hygiene, tests, ml-tests, deps]
+    if: always() && needs.changes.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # This job runs the PR's own scripts/ci/pr_report.py, so its token stays
+    # read-only. Writing (the PR comment, the archive commit) happens in the
+    # `comment` and `archive` jobs below, which never execute PR code.
+    permissions:
+      contents: read
+      pull-requests: read      # find the PR behind a push to main
+    outputs:
+      out: ${{ steps.build.outputs.out }}
+      pr-number: ${{ steps.pr.outputs.number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: |
+            scripts
+            pr-reports
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: actions/download-artifact@v4
+        continue-on-error: true      # a cancelled run may have produced none
+        with:
+          path: ci-artifacts
+      - name: Find the pull request behind this push
+        id: pr
+        if: github.event_name == 'push'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner: context.repo.owner, repo: context.repo.repo, commit_sha: context.sha });
+            const pr = data.find(p => p.merged_at) || data[0];
+            if (!pr) { core.info('direct push — no pull request'); return; }
+            core.setOutput('number', String(pr.number));
+            core.setOutput('title', pr.title);
+            core.setOutput('author', pr.user.login);
+            core.setOutput('url', pr.html_url);
+            core.setOutput('head_ref', pr.head.ref);
+      - name: Build the report
+        id: build
+        env:
+          BASE: ${{ needs.changes.outputs.base }}
+          HEAD: ${{ needs.changes.outputs.head }}
+          JOBS_JSON: ${{ toJSON(needs) }}
+          REPORT_EVENT: ${{ github.event_name }}
+          REPORT_PR_NUMBER: ${{ github.event.pull_request.number || steps.pr.outputs.number }}
+          REPORT_PR_TITLE: ${{ github.event.pull_request.title || steps.pr.outputs.title }}
+          REPORT_PR_AUTHOR: ${{ github.event.pull_request.user.login || steps.pr.outputs.author }}
+          REPORT_PR_URL: ${{ github.event.pull_request.html_url || steps.pr.outputs.url }}
+          REPORT_HEAD_REF: ${{ github.head_ref || steps.pr.outputs.head_ref || github.ref_name }}
+          REPORT_BASE_REF: ${{ github.base_ref || 'main' }}
+          REPORT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -n "$REPORT_PR_NUMBER" ]; then
+            out="pr-reports/$(printf 'PR-%04d' "$REPORT_PR_NUMBER")"
+          else
+            out="pr-reports/commit-${HEAD:0:7}"
+          fi
+          echo "out=$out" >> "$GITHUB_OUTPUT"
+          python scripts/ci/pr_report.py build --base "$BASE" --head "$HEAD" \
+            --artifacts ci-artifacts --out "$out" --comment-out comment.md \
+            --artifact-hint "📦 Full report: the \`pr-report\` artifact of [this workflow run]($REPORT_RUN_URL) — it is archived to \`$out/\` when the PR merges."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr-report
+          path: ${{ steps.build.outputs.out }}/
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr-comment
+          path: comment.md
+          retention-days: 30
+
+  comment:
+    name: PR comment
+    needs: report
+    # Same-repo PRs only: fork PRs get a read-only token regardless.
+    if: >
+      always() && needs.report.result == 'success' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write     # sticky PR comment
+    steps:
+      # No checkout: this job only reads the rendered comment, as data.
+      - uses: actions/download-artifact@v4
+        with:
+          name: pr-comment
+      - name: Post / update the PR comment
+        continue-on-error: true      # a comment failure must never fail CI
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('comment.md', 'utf8');
+            const marker = '<!-- ci-pr-report -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments,
+              { owner, repo, issue_number, per_page: 100 });
+            const mine = comments.find(c => c.user.type === 'Bot' && c.body.includes(marker));
+            if (mine) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+  archive:
+    name: Archive report
+    needs: report
+    # Only after a merge: the code checked out here is main's, already reviewed.
+    if: >
+      always() && needs.report.result == 'success' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write          # commit the report into pr-reports/ on main
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: |
+            scripts
+            pr-reports
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: pr-report
+          path: ci-report/${{ needs.report.outputs.out }}
+      - name: Archive into pr-reports/ on main
+        continue-on-error: true      # e.g. branch protection forbids bot pushes
+        env:
+          OUT: ci-report/${{ needs.report.outputs.out }}
+          PR_NUMBER: ${{ needs.report.outputs.pr-number }}
+        run: |
+          label="${PR_NUMBER:+PR #$PR_NUMBER}"
+          bash scripts/ci/archive_report.sh "$OUT" "${label:-commit $GITHUB_SHA}" main

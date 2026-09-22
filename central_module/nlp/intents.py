@@ -66,7 +66,11 @@ CATALOG: tuple[Intent, ...] = (
             "edit {app}"),      # editing a file = opening it
            {"app": "app"}),
     Intent("search_web", "search_web",
-           ("search for {text}", "search {text}", "google {text}",
+           # Longest literal prefix wins, so the specific phrasings must
+           # exist here — otherwise bare "search {text}" swallows "the web
+           # for ..." into the query.
+           ("search the web for {text}", "search google for {text}",
+            "search for {text}", "search {text}", "google {text}",
             "look up {text}"),
            {"text": "text"}),
     Intent("open_url", "open_url",
@@ -77,7 +81,8 @@ CATALOG: tuple[Intent, ...] = (
     Intent("type_text", "type_text",
            ("type {text}", "write {text}"), {"text": "text"}),
     Intent("press_key", "press_key",
-           ("press {key}", "hit {key}", "press key {key}"), {"key": "key"}),
+           ("press {key}", "hit {key}", "tap {key}", "press key {key}",
+            "press the {key} key"), {"key": "key"}),
     Intent("copy", "edit_combo", ("copy", "copy this", "copy that")),
     Intent("paste", "edit_combo", ("paste", "paste it", "paste here")),
     Intent("cut", "edit_combo", ("cut", "cut this")),

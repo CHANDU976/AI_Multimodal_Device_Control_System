@@ -1,0 +1,26 @@
+# Test & CI outputs (docs/ci-cd.md)
+.venv/
+.venv-test/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+htmlcov/
+test-results/
+ci-artifacts/
+dist/
+
+# PR reports generated on a developer machine; CI archives the real ones
+# under pr-reports/PR-NNNN/.
+pr-reports/local/
+
+# Claude Code settings are per-machine (local paths, permission allowlists).
+# No leading slash: ignored at every level of the tree.
+.claude/
+
+# Bytecode. (Files already tracked stay tracked until someone runs
+# `git rm -r --cached` on them — this only stops new ones being added.)
+__pycache__/
+*.py[cod]

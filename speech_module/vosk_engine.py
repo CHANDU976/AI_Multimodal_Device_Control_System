@@ -16,9 +16,12 @@ import queue
 import threading
 import logging
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 import vosk
+
+if TYPE_CHECKING:               # annotations only
+    import numpy as np
 
 from audio_utils import StreamResampler
 from config import AUDIO, VOSK as VOSK_CFG, VOSK_MODELS, VOSK_DEFAULT_LANG, EVENT_TYPE

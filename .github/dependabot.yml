@@ -1,0 +1,12 @@
+# Keeps the GitHub Actions used by the workflows on supported versions.
+# Python dependencies are pinned by hand (requirements.txt documents the
+# platform constraints behind every pin), so only actions are automated.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

@@ -1,0 +1,48 @@
+# Continuous delivery — see docs/ci-cd.md.
+#
+# Push a version tag on main (git tag v1.0.0 && git push origin v1.0.0):
+#   1. the full CI pipeline runs against the tagged commit (all three OSes);
+#   2. only if it passes, a GitHub Release is published with a clean source
+#      bundle (no .venv, no model weights — MODELS.md lists them), a checksum,
+#      and release notes assembled from the archived PR reports.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    # The called workflow's report job asks for these; a caller must grant at
+    # least what its callees request.
+    permissions:
+      contents: write
+      pull-requests: write
+
+  publish:
+    name: Publish release
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build source bundle and release notes
+        run: python scripts/ci/release.py --tag "$GITHUB_REF_NAME" --out dist
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.sha256
+          --title "$GITHUB_REF_NAME" --notes-file dist/RELEASE_NOTES.md --verify-tag
