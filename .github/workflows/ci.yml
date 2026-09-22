@@ -4,8 +4,9 @@
 #             ├── hygiene ────┤
 #             ├── tests (OS×) ├──► gate      (the one required status check)
 #             ├── ml-tests ───┤
-#             └── deps (*) ───┴──► report    (PR comment + artifact; archived to
-#                                             pr-reports/ when a PR lands on main)
+#             └── deps (*) ───┴──► report    (read-only: builds the report artifact)
+#                                    ├──► comment (PR comment; writes, runs no PR code)
+#                                    └──► archive (pr-reports/ on main, after a merge)
 #   (*) only when a requirements file changed
 name: CI
 
@@ -316,9 +317,15 @@ jobs:
     if: always() && needs.changes.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # This job runs the PR's own scripts/ci/pr_report.py, so its token stays
+    # read-only. Writing (the PR comment, the archive commit) happens in the
+    # `comment` and `archive` jobs below, which never execute PR code.
     permissions:
-      contents: write          # archive the report into pr-reports/ on main
-      pull-requests: write     # sticky PR comment
+      contents: read
+      pull-requests: read      # find the PR behind a push to main
+    outputs:
+      out: ${{ steps.build.outputs.out }}
+      pr-number: ${{ steps.pr.outputs.number }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -378,10 +385,30 @@ jobs:
           name: pr-report
           path: ${{ steps.build.outputs.out }}/
           retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr-comment
+          path: comment.md
+          retention-days: 30
+
+  comment:
+    name: PR comment
+    needs: report
+    # Same-repo PRs only: fork PRs get a read-only token regardless.
+    if: >
+      always() && needs.report.result == 'success' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write     # sticky PR comment
+    steps:
+      # No checkout: this job only reads the rendered comment, as data.
+      - uses: actions/download-artifact@v4
+        with:
+          name: pr-comment
       - name: Post / update the PR comment
-        if: >
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository
         continue-on-error: true      # a comment failure must never fail CI
         uses: actions/github-script@v7
         with:
@@ -399,12 +426,38 @@ jobs:
             } else {
               await github.rest.issues.createComment({ owner, repo, issue_number, body });
             }
+
+  archive:
+    name: Archive report
+    needs: report
+    # Only after a merge: the code checked out here is main's, already reviewed.
+    if: >
+      always() && needs.report.result == 'success' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write          # commit the report into pr-reports/ on main
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: |
+            scripts
+            pr-reports
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: pr-report
+          path: ci-report/${{ needs.report.outputs.out }}
       - name: Archive into pr-reports/ on main
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         continue-on-error: true      # e.g. branch protection forbids bot pushes
         env:
-          OUT: ${{ steps.build.outputs.out }}
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          OUT: ci-report/${{ needs.report.outputs.out }}
+          PR_NUMBER: ${{ needs.report.outputs.pr-number }}
         run: |
           label="${PR_NUMBER:+PR #$PR_NUMBER}"
           bash scripts/ci/archive_report.sh "$OUT" "${label:-commit $GITHUB_SHA}" main

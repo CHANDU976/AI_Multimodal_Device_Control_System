@@ -152,14 +152,17 @@ become custom commands.
 
 ## Smoke tests
 
-Every non-trivial file runs standalone:
 The safe central execution tests mock OS side effects while exercising intent
 recognition, slot extraction, adapter dispatch, confirmation, and dry-run
-isolation:
+isolation. They are pytest tests (fixtures, markers, the `pythonpath` in
+`pyproject.toml`), so `unittest discover` cannot run them:
 
 ```bash
-.venv\Scripts\python.exe -m unittest discover -s tests -v
+python -m pip install -r requirements-test.txt     # once, in a separate venv
+python -m pytest tests/central tests/test_central_module.py -v
 ```
+
+Every non-trivial file also runs standalone:
 
 ```bash
 python -m central_module.nlp.normalize

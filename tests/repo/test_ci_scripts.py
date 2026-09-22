@@ -406,6 +406,9 @@ PASS_TESTS = [{"failed": 0, "errors": 0}]
     (dict(tests=PASS_TESTS, advisory_new=[{}]), "attention"),
     (dict(), "unverified"),
     (dict(jobs={"deps": {"result": "skipped"}}, tests=PASS_TESTS), "ready"),
+    # A required job that did not run is not a pass (matches the CI gate).
+    (dict(jobs={"tests": {"result": "skipped"}}, tests=PASS_TESTS), "blocked"),
+    (dict(jobs={"hygiene": {}}, tests=PASS_TESTS), "blocked"),
 ])
 def test_verdict(kwargs, verdict):
     args = dict(jobs=None, tests=[], lint_blocking=[], hygiene=None, flags=[], diffcov=None,

@@ -53,6 +53,7 @@ LARGE_CHANGE_LINES = 1500
 ICON = {"ready": "✅", "attention": "⚠️", "blocked": "❌", "unverified": "ℹ️"}
 LABEL = {"ready": "Ready to merge", "attention": "Mergeable — needs reviewer attention",
          "blocked": "Blocked — required checks failed", "unverified": "Checks not run"}
+OPTIONAL_JOBS = {"deps"}              # skipped when no requirements file changed
 JOB_NAMES = {
     "changes": "Change detection", "lint": "Lint (blocking rules)",
     "hygiene": "Repository hygiene", "tests": "Tests (all platforms)",
@@ -383,7 +384,11 @@ def decide(jobs, tests, lint_blocking, hygiene, flags, diffcov,
     """(verdict, reasons)."""
     reasons = []
     for row in job_rows(jobs):
-        if row["result"] in ("failure", "cancelled"):
+        # Same rule as the CI gate: anything but success blocks, except a
+        # skipped job that is allowed to skip. Otherwise a skipped test job
+        # would read "Ready to merge" while the gate is red.
+        if row["result"] != "success" and not (row["job"] in OPTIONAL_JOBS
+                                               and row["result"] == "skipped"):
             reasons.append(f"CI job `{row['job']}` {row['result']}")
     failed = sum(t["failed"] + t["errors"] for t in tests)
     if failed:

@@ -94,19 +94,35 @@ def test_needs_refer_to_real_jobs(workflow):
             assert dep in jobs, f"{name}: {job_name} needs unknown job {dep}"
 
 
+REPORTING = {"gate", "report", "comment", "archive"}
+
+
 def test_ci_gate_covers_every_check():
     jobs = load("ci.yml")["jobs"]
-    checks = set(jobs) - {"gate", "report"}
+    checks = set(jobs) - REPORTING
     assert set(jobs["gate"]["needs"]) == checks
     assert jobs["gate"]["if"] == "always()"
     assert set(jobs["report"]["needs"]) == checks
 
 
-def test_only_the_report_job_can_write():
+def test_only_the_publishing_jobs_can_write():
     jobs = load("ci.yml")["jobs"]
     writers = {name for name, job in jobs.items()
                if "write" in json.dumps(job.get("permissions", {}))}
-    assert writers == {"report"}
+    assert writers == {"comment", "archive"}
+
+
+def test_write_tokens_never_meet_pr_code():
+    # The report job executes the PR's own scripts, so it must stay read-only;
+    # the comment job must not check anything out; the archive job only runs
+    # after a merge, when the checked-out code is main's.
+    jobs = load("ci.yml")["jobs"]
+    assert "write" not in json.dumps(jobs["report"]["permissions"])
+    assert not any("actions/checkout" in step.get("uses", "")
+                   for step in jobs["comment"]["steps"])
+    archive_if = jobs["archive"]["if"]
+    assert "github.event_name == 'push'" in archive_if
+    assert "github.ref == 'refs/heads/main'" in archive_if
 
 
 def test_ci_triggers():

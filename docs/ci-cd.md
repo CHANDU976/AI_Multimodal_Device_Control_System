@@ -23,8 +23,9 @@ changes ──┬── lint ───────────┐
           ├── hygiene ────────┤
           ├── tests (per OS) ─┼──► CI gate   ← the one required status check
           ├── ml-tests ───────┤
-          └── deps (*) ───────┴──► PR report ← comment on the PR, artifact,
-                                               archived to pr-reports/ on main
+          └── deps (*) ───────┴──► PR report ← builds the report (read-only token)
+                                     ├──► comment  ← posts it on the PR
+                                     └──► archive  ← commits it to pr-reports/ on main
 (*) only when a requirements*.txt file changed
 ```
 
@@ -66,12 +67,19 @@ Settings → Branches (or Rules → Rulesets) → add a rule for `main`:
    report flags a branch that is behind anyway.
 4. If `CODEOWNERS` is filled in, **require review from Code Owners**.
 
-Archiving reports needs one more decision. When a PR merges, the `report`
+Archiving reports needs one more decision. When a PR merges, the `archive`
 job commits `pr-reports/PR-NNNN/` to `main` as `github-actions[bot]`. If a
 rule blocks direct pushes to `main`, that commit is rejected. The job then
 warns but does not fail, and the report stays on the PR comment and as a
 30-day artifact. To keep the permanent archive, let GitHub Actions bypass
 the rule (Rulesets → *Bypass list*) or exempt `pr-reports/**`.
+
+That bypass is safe because of how the report jobs are split. The `report`
+job runs the PR's own `scripts/ci/pr_report.py`, so its token is read-only.
+The two jobs that can write never run PR code: `comment` checks nothing out
+and only posts the rendered Markdown, and `archive` runs only after a merge,
+when the code it checks out is already on `main`. A test
+(`test_write_tokens_never_meet_pr_code`) keeps it that way.
 
 ## PR reports
 
