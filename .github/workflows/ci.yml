@@ -42,6 +42,7 @@ jobs:
       base: ${{ steps.range.outputs.base }}
       head: ${{ steps.range.outputs.head }}
       deps: ${{ steps.range.outputs.deps }}
+      dep-files: ${{ steps.range.outputs.dep-files }}
       os-matrix: ${{ steps.range.outputs.os-matrix }}
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +69,13 @@ jobs:
           echo "base=$base" >> "$GITHUB_OUTPUT"
           echo "head=$head" >> "$GITHUB_OUTPUT"
 
-          if git diff --name-only "$base...$head" | grep -Eq '(^|/)requirements[^/]*\.txt$'; then
+          # Only the requirements files this range touches are re-resolved: a
+          # pin that rotted on PyPI is flagged by the PR that edits it, not by
+          # every PR that happens to edit some other requirements file.
+          dep_files=$(git diff --name-only "$base...$head" \
+                        | grep -E '(^|/)requirements[^/]*\.txt$' | tr '\n' ' ' || true)
+          echo "dep-files=$dep_files" >> "$GITHUB_OUTPUT"
+          if [ -n "$dep_files" ]; then
             echo "deps=true" >> "$GITHUB_OUTPUT"
           else
             echo "deps=false" >> "$GITHUB_OUTPUT"
@@ -170,6 +177,7 @@ jobs:
         with:
           filter: blob:none
           sparse-checkout: |
+            .github
             central_module
             speech_module
             Mousegesture
@@ -204,8 +212,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           filter: blob:none
+          # Same tree as the tests job: pytest still collects (then deselects)
+          # every test module, and those import the speech/gesture sources.
           sparse-checkout: |
+            .github
             central_module
+            speech_module
+            Mousegesture
             Models
             tests
             scripts
@@ -261,7 +274,15 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: pip resolves every pin for this platform (nothing is installed)
-        run: python -m pip install --dry-run --ignore-installed -r "${{ matrix.file }}"
+        shell: bash
+        env:
+          CHANGED: ${{ needs.changes.outputs.dep-files }}
+          FILE: ${{ matrix.file }}
+        run: |
+          case " $CHANGED " in
+            *" $FILE "*) python -m pip install --dry-run --ignore-installed -r "$FILE" ;;
+            *) echo "$FILE is unchanged in this range; not re-resolved." ;;
+          esac
 
   # ── Merge decision ────────────────────────────────────────────────────────
   gate:

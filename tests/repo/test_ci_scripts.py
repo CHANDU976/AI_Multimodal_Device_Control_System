@@ -229,11 +229,12 @@ def test_every_error_class_is_caught(repo):
 
 def test_pre_existing_problems_do_not_block(repo):
     # A secret already on main is not this PR's doing; only ADDED lines count.
+    key = "AKIA" + "ABCDEFGHIJKLMNOP"          # split so this file doesn't trip the scan
     repo.git("checkout", "-q", "main")
-    repo.commit({"legacy.py": 'KEY = "AKIAABCDEFGHIJKLMNOP"\n'})
+    repo.commit({"legacy.py": f'KEY = "{key}"\n'})
     repo.git("checkout", "-q", "feature")
     repo.git("merge", "-q", "main")
-    repo.commit({"legacy.py": 'KEY = "AKIAABCDEFGHIJKLMNOP"\nOTHER = 1\n'})
+    repo.commit({"legacy.py": f'KEY = "{key}"\nOTHER = 1\n'})
     assert checks()["errors"] == []
 
 

@@ -35,7 +35,7 @@ changes ──┬── lint ───────────┐
 | **Repository hygiene** | Scans what the PR *adds* for conflict markers, broken JSON or Python, LFS bypasses, non-LFS files over 10 MB and credentials. It only warns about `.venv/`/`__pycache__` changes, 2–10 MB files and a branch that is behind `main`. | errors only |
 | **Tests (ubuntu, windows)** | The whole pytest suite except the torch tests. Pushes to `main` also run it on macOS. | yes |
 | **NLU model tests** | The torch/transformers tests (`-m ml`), on CPU wheels. | yes |
-| **Dependencies resolve** | `pip install --dry-run` of every pinned requirement file on each platform it supports. | yes, when it runs |
+| **Dependencies resolve** | `pip install --dry-run` of each requirements file the PR changed, on every platform that file supports. Unchanged files are not re-checked. | yes, when it runs |
 | **CI gate** | Fails unless every job above passed. A skipped `deps` job counts as passing. | **this is the required check** |
 | **PR report** | Builds the report, comments on the PR, uploads the `pr-report` artifact, and archives it on `main`. | no |
 
@@ -250,7 +250,7 @@ the marker to be removed. Every report lists them.
 | hygiene `secret` | Revoke the credential first, then remove it from history. |
 | hygiene `large-file` | Track the file with Git LFS (add a rule to `.gitattributes`). |
 | Lint `F821` | An undefined name. Annotation-only names need an `if TYPE_CHECKING:` import. |
-| `deps` job | A pin doesn't resolve on that platform. The constraints are in `requirements.txt`: Python ≤ 3.11 and numpy < 2 for DeepFilterNet. |
+| `deps` job | A pin doesn't resolve on that platform. The constraints are in `requirements.txt`: Python ≤ 3.11 and numpy < 2 for DeepFilterNet. `Mousegesture/others/requirements.txt` cannot resolve anywhere today: every mediapipe 0.8.x release has been removed from PyPI, so editing that file fails this job until the pin is moved. |
 | An `XPASS(strict)` failure | You fixed a pinned defect. Remove the `xfail` marker from that test. |
 
 ## Releases
