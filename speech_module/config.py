@@ -300,3 +300,20 @@ CONCURRENCY = {
     "result_queue_maxsize": 50,         # inter-process result queue depth
     "whisper_process_timeout": 30,      # seconds before Whisper worker is considered hung
 }
+
+# ── IPC message shaping ─────────────────────────────────────────────────────────
+# VOSK's preview recognizer fires a partial result many times per utterance
+# (roughly every audio chunk it decodes). Forwarding every one of those over
+# IPC is wasteful — the central module only needs enough of them to keep a
+# "live captions" UI feeling responsive, not the full stream. These knobs
+# collapse consecutive partials down to the minimum that still looks live:
+# identical text is dropped, and nothing goes out faster than the interval
+# below, however fast VOSK is producing partials underneath.
+#
+# Final events (command / dictation / device / error) are already exactly
+# one message per segment or per state change, so nothing here applies to
+# them.
+IPC = {
+    "partial_dedupe": True,             # drop a partial identical to the last one sent
+    "partial_min_interval_s": 0.15,     # minimum gap between partial IPC messages
+}

@@ -75,12 +75,10 @@ def main() -> int:
     stop = threading.Event()
 
     def on_event(event: SpeechEvent) -> None:
-        emit({
-            "type": event.event_type,
-            "text": event.text,
-            "source": event.source,
-            "metadata": event.metadata,
-        })
+        # SpeechEvent.to_ipc() already returns the exact JSON-serialisable
+        # object for the wire protocol (type/text/source/timestamp/
+        # confidence/metadata) — nothing left to reshape here, just emit it.
+        emit(event.to_ipc())
 
     try:
         manager = SpeechManager(callback=on_event)
