@@ -318,14 +318,31 @@ python -m central_module.nlp.nlu.train --quick  # short sanity run (artefact mar
 - `README.md` (this file) — install, platform matrix, verification steps
 - [`Architecture_diagram/`](Architecture_diagram/) — the rendered HLD (`HLD_v7.png`) and `ARCHITECTURE_DIAGRAM_SPEC.md`, the full pipeline diagram specification
 - `Mousegesture/README.md` — gesture engine and binding GUI notes
+- [`docs/ci-cd.md`](docs/ci-cd.md) — CI/CD pipeline, test suite, PR reports, branch protection, releases
+- [`pr-reports/`](pr-reports/README.md) — a structured report for every merged pull request
 - Every module's configuration file carries **the measurement that justifies each constant**,
   in-comment — thresholds were calibrated, not guessed. Start with `speech_module/config.py`
   (`ROUTING`, `DENOISE`) and `Mousegesture/gesture_config.json`.
 
 ## 🧪 Testing
 
-The project has runnable **smoke tests and one instrumented bench harness — not a pytest suite**.
-Migrating these into `tests/` is named in Remaining Work below.
+**Automated.** `tests/` holds a pytest suite covering all three modules, the model-fetch script
+and the CI tooling. It fakes every hardware boundary (mic, camera, input injection, OS
+commands) and needs no model weights. CI runs it on Linux and Windows for every pull request,
+together with lint, repository-hygiene and dependency checks, and posts a structured report on
+the PR that is archived to [`pr-reports/`](pr-reports/README.md) when the PR merges. Run it
+locally with Python 3.11:
+
+```bash
+python -m pip install -r requirements-test.txt     # a separate venv — no torch needed
+python -m pytest
+```
+
+[`docs/ci-cd.md`](docs/ci-cd.md) covers the pipeline, the report format, test markers
+(`slow`, `ml`, `models`), branch protection and releases.
+
+**Manual, on real hardware.** CI cannot hear a microphone or see a hand, so these smoke tests
+and harnesses remain the way to verify the real-time paths:
 
 | Module  | What is tested                             | How                                                                                                                                                                                                                                                         |
 | ------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -427,13 +444,13 @@ cannot be read on this hardware — WDDM makes NVML return `None` for every proc
 - [X] OS-independent action layer (Windows / macOS / Linux-X11)
 - [X] Personalisation: alias promotion, usage learning, user macros
 - [X] Multilingual ASR (Indian English, US English, Hindi), runtime switch
+- [X] `tests/` pytest suite + CI/CD on every PR, with structured PR reports (see `docs/ci-cd.md`)
 
 **Remaining**
 
 - [ ] Unified settings UI across all three modalities *(High)* — the gesture GUI is separate; speech and central are configured through JSON files
 - [ ] True multimodal fusion — speech ↔ gesture mutual disambiguation *(High)* — this is the "multimodal" claim in the title
 - [ ] Held-out evaluation harness — real utterances, end-to-end success rate, photon-to-cursor latency *(Med)*
-- [ ] `tests/` package — migrate the harnesses to pytest *(Med)*
 - [ ] Context awareness v2 — time-of-day and foreground-app conditioned suggestions *(Med)* — `usage.json` already collects the signals; nothing consumes them
 - [ ] Linux / macOS end-to-end verification *(Med)* — adapters are written; only Windows is verified
 - [ ] Wake word / push-to-talk *(Low)*

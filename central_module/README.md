@@ -39,11 +39,11 @@ python -m central_module --once "open chrome" --dry-run
 
 `supervisor.py` launches each child with pipes:
 
-| channel | direction | protocol |
-|---|---|---|
-| stdout | child → central | JSON lines: events (`{"type": ...}`) |
-| stdin  | central → child | JSON lines: control ops (`{"op": ...}`) |
-| stderr | child → central | free-form logs, re-logged with the child's name |
+| channel | direction        | protocol                                        |
+| ------- | ---------------- | ----------------------------------------------- |
+| stdout  | child → central | JSON lines: events (`{"type": ...}`)          |
+| stdin   | central → child | JSON lines: control ops (`{"op": ...}`)       |
+| stderr  | child → central | free-form logs, re-logged with the child's name |
 
 Crashed children restart with exponential backoff (1 s → 30 s cap, 5
 attempts; a minute of healthy uptime resets the count). `{"op": "shutdown"}`
@@ -94,8 +94,14 @@ pipeline:
    **none class** (prose, questions, near-miss commands like
    "delete chatter.txt") so it *refuses* instead of guessing. Inference is
    int8-quantized, ~15-40 ms on CPU, fully offline from `Models/NLU/`.
-4. **fuzzy** — difflib similarity, used only while no trained model exists,
-   so a fresh clone still works before training.
+4. **fuzzy** — difflib similarity as a last-resort safety net, seeing only
+   what both the patterns and the model rejected. Wordpiece tokenization is
+   brittle on misspelled verbs ("opun chrome"), where character-level
+   similarity is the right tool; length and token-agreement guards keep
+   genuine non-commands out.
+
+**Measured** (2 epochs, 34k train / 1.8k dev, ~36 min CPU): **98.9% dev
+intent accuracy, 99.7% slot accuracy**, ~15 ms per parse end-to-end.
 
 No match → the phrase is *recorded*, never guessed at.
 
@@ -115,10 +121,10 @@ learns the new class (patterns and paraphrases feed the generator).
 `actions/os_adapter.py` defines the interface; the executor never touches an
 OS API directly.
 
-| | Windows | macOS | Linux (X11) |
-|---|---|---|---|
-| implementation | ctypes `SendInput` / `ShellExecute` | `osascript` + stock tools | `xdotool`, `pactl`, `xdg-open` |
-| extra install | none | none (grant Accessibility) | `sudo apt install xdotool` (+ `playerctl`, `brightnessctl` optional) |
+|                | Windows                                | macOS                       | Linux (X11)                                                                |
+| -------------- | -------------------------------------- | --------------------------- | -------------------------------------------------------------------------- |
+| implementation | ctypes`SendInput` / `ShellExecute` | `osascript` + stock tools | `xdotool`, `pactl`, `xdg-open`                                       |
+| extra install  | none                                   | none (grant Accessibility)  | `sudo apt install xdotool` (+ `playerctl`, `brightnessctl` optional) |
 
 Volume/media use media keys, typing is Unicode-injection (any script incl.
 Hindi), apps resolve via user aliases → built-in table → `PATH` → OS shell.
@@ -147,6 +153,13 @@ become custom commands.
 ## Smoke tests
 
 Every non-trivial file runs standalone:
+The safe central execution tests mock OS side effects while exercising intent
+recognition, slot extraction, adapter dispatch, confirmation, and dry-run
+isolation:
+
+```bash
+.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
 
 ```bash
 python -m central_module.nlp.normalize

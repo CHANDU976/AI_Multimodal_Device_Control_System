@@ -198,13 +198,12 @@ class IntentEngine:
             if parsed is not None:
                 name, slots, conf = parsed
                 return IntentMatch(BY_NAME[name], slots, conf, "model", cmd)
-            if self._neural.trusted:
-                # A properly trained model's refusal is the answer. Fuzzing
-                # past it would resurrect exactly the false positives
-                # ("delete xhatter" → delete) the model was trained to reject.
-                return None
 
-        # 4. Fuzzy fallback — rule engine, or an untrusted model's refusal.
+        # 4. Fuzzy — last resort, and only for what the patterns AND the
+        #    model both rejected. Wordpiece tokenization is brittle on
+        #    misspelled verbs ("opun chrome"), where character-level
+        #    similarity is exactly the right tool; its length and
+        #    token-agreement guards keep genuine non-commands out.
         return self._fuzzy(light, cmd)
 
     @staticmethod

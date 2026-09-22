@@ -1,0 +1,28 @@
+# Test & CI dependencies — see docs/ci-cd.md.
+#
+# Deliberately light. The heavy runtime stack (torch, DeepFilterNet,
+# faster-whisper, mediapipe, opencv, pynput, sounddevice) is NOT needed: the
+# suite fakes every native and hardware boundary. The CI `ml-tests` job adds
+# torch + transformers from requirements.txt on top of this file.
+#
+#   python -m pip install -r requirements-test.txt
+#   python -m pytest                 # everything except the torch tests
+#
+# Python 3.11, like the runtime (requirements.txt explains why not 3.12+).
+
+pytest==9.1.1
+pytest-cov==7.1.0
+pytest-timeout==2.4.0
+coverage==7.16.1                # >= 7.10: `patch = ["subprocess"]` measures child processes
+ruff==0.16.8                    # lint job; pinned so rule sets do not drift under us
+PyYAML==6.0.3                   # tests parse the workflow files
+
+# Real (small) runtime pieces the speech tests exercise directly.
+numpy==1.26.4                   # same pin as requirements.txt (DeepFilterNet needs < 2)
+soxr==1.1.0                     # resampling is tested for real, not faked
+soundfile==0.14.0               # calibration harness reads/writes wav clips
+vosk==0.3.45 ; sys_platform != "darwin"
+vosk==0.3.44 ; sys_platform == "darwin"
+
+# Gesture Studio helpers (thumbnail decoding / placeholders).
+Pillow==12.3.0

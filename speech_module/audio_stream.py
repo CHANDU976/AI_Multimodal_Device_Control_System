@@ -11,11 +11,14 @@ import path_setup  # noqa: F401 — adds project root to sys.path
 import queue
 import threading
 import logging
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 
 from config import AUDIO, CONCURRENCY
+
+if TYPE_CHECKING:               # annotations only — the runtime import stays lazy
+    import sounddevice as sd
 
 logger = logging.getLogger(__name__)
 

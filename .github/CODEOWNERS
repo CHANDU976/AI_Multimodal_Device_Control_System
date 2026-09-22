@@ -1,0 +1,16 @@
+# Code owners — GitHub requests their review automatically on PRs that touch
+# their paths. Inert until filled in: replace the placeholders with the team's
+# GitHub handles (only @CHANDU976 is known here), uncomment, then enable
+# "Require review from Code Owners" in the branch protection rule for main
+# (docs/ci-cd.md → "Protecting main").
+#
+# Later rules win, so keep the catch-all first.
+#
+# *                         @CHANDU976
+# /central_module/          @CHANDU976
+# /speech_module/           @<sampada-github-handle>
+# /fetch_deepfilternet_model.py @<sampada-github-handle>
+# /Mousegesture/            @<atif-github-handle> @<nikhil-github-handle>
+# /Models/                  @CHANDU976 @<sampada-github-handle>
+# /.github/                 @CHANDU976
+# /scripts/ci/              @CHANDU976
