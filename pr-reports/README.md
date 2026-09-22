@@ -17,4 +17,6 @@ developer machine and is git-ignored.
 
 ## Reports
 
-_No reports archived yet._
+| PR | Title | Author | Verdict | Files | +/− | Tests | Modules | Date |
+| --- | --- | --- | --- | ---: | --- | --- | --- | --- |
+| [#7](PR-0007/README.md) | Add CI/CD pipeline, test suite and PR reports | CHANDU976 | ⚠️ attention | 67 | +10782/−42 | 4620✓ 0✗ | central, ci, docs, gesture, reports, speech, tests | 2026-09-22 |

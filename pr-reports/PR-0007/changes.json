@@ -1,0 +1,795 @@
+{
+  "areas": [
+    {
+      "area": "central",
+      "title": "Central module (orchestrator + NLU)",
+      "files": 3,
+      "additions": 40,
+      "deletions": 20,
+      "binary": 0,
+      "components": {
+        "nlp": 2,
+        "core": 1
+      }
+    },
+    {
+      "area": "speech",
+      "title": "Speech module",
+      "files": 2,
+      "additions": 8,
+      "deletions": 2,
+      "binary": 0,
+      "components": {
+        "audio_stream": 1,
+        "vosk_engine": 1
+      }
+    },
+    {
+      "area": "gesture",
+      "title": "Gesture module",
+      "files": 1,
+      "additions": 0,
+      "deletions": 17,
+      "binary": 0,
+      "components": {
+        ".claude": 1
+      }
+    },
+    {
+      "area": "tests",
+      "title": "Tests",
+      "files": 42,
+      "additions": 8014,
+      "deletions": 0,
+      "binary": 0,
+      "components": {
+        "central": 15,
+        "speech": 10,
+        "gesture": 7,
+        "helpers": 5,
+        "repo": 3,
+        "root": 2
+      }
+    },
+    {
+      "area": "ci",
+      "title": "CI/CD & tooling",
+      "files": 15,
+      "additions": 2391,
+      "deletions": 0,
+      "binary": 0,
+      "components": {
+        "scripts": 5,
+        ".github": 4,
+        "workflows": 3,
+        ".gitignore": 1,
+        "pyproject.toml": 1,
+        "requirements-test.txt": 1
+      }
+    },
+    {
+      "area": "docs",
+      "title": "Documentation",
+      "files": 2,
+      "additions": 305,
+      "deletions": 3,
+      "binary": 0,
+      "components": {
+        "README.md": 1,
+        "docs": 1
+      }
+    },
+    {
+      "area": "reports",
+      "title": "PR reports",
+      "files": 2,
+      "additions": 24,
+      "deletions": 0,
+      "binary": 0,
+      "components": {}
+    }
+  ],
+  "files": [
+    {
+      "path": ".github/CODEOWNERS",
+      "status": "A",
+      "additions": 16,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": ".github"
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "status": "A",
+      "additions": 12,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": ".github"
+    },
+    {
+      "path": ".github/labeler.yml",
+      "status": "A",
+      "additions": 45,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": ".github"
+    },
+    {
+      "path": ".github/pull_request_template.md",
+      "status": "A",
+      "additions": 29,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": ".github"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "status": "A",
+      "additions": 463,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": "workflows"
+    },
+    {
+      "path": ".github/workflows/labeler.yml",
+      "status": "A",
+      "additions": 23,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": "workflows"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "status": "A",
+      "additions": 48,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": "workflows"
+    },
+    {
+      "path": ".gitignore",
+      "status": "A",
+      "additions": 26,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": ".gitignore"
+    },
+    {
+      "path": "Mousegesture/.claude/settings.json",
+      "status": "D",
+      "additions": 0,
+      "deletions": 17,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": ".claude"
+    },
+    {
+      "path": "README.md",
+      "status": "M",
+      "additions": 20,
+      "deletions": 3,
+      "binary": false,
+      "old_path": null,
+      "area": "docs",
+      "component": "README.md"
+    },
+    {
+      "path": "central_module/README.md",
+      "status": "M",
+      "additions": 28,
+      "deletions": 12,
+      "binary": false,
+      "old_path": null,
+      "area": "central",
+      "component": "core"
+    },
+    {
+      "path": "central_module/nlp/intent_engine.py",
+      "status": "M",
+      "additions": 5,
+      "deletions": 6,
+      "binary": false,
+      "old_path": null,
+      "area": "central",
+      "component": "nlp"
+    },
+    {
+      "path": "central_module/nlp/intents.py",
+      "status": "M",
+      "additions": 7,
+      "deletions": 2,
+      "binary": false,
+      "old_path": null,
+      "area": "central",
+      "component": "nlp"
+    },
+    {
+      "path": "docs/ci-cd.md",
+      "status": "A",
+      "additions": 285,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "docs",
+      "component": "docs"
+    },
+    {
+      "path": "pr-reports/README.md",
+      "status": "A",
+      "additions": 20,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "reports",
+      "component": ""
+    },
+    {
+      "path": "pr-reports/index.json",
+      "status": "A",
+      "additions": 4,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "reports",
+      "component": ""
+    },
+    {
+      "path": "pyproject.toml",
+      "status": "A",
+      "additions": 70,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": "pyproject.toml"
+    },
+    {
+      "path": "requirements-test.txt",
+      "status": "A",
+      "additions": 28,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": "requirements-test.txt"
+    },
+    {
+      "path": "scripts/ci/archive_report.sh",
+      "status": "A",
+      "additions": 47,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": "scripts"
+    },
+    {
+      "path": "scripts/ci/ci_common.py",
+      "status": "A",
+      "additions": 341,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": "scripts"
+    },
+    {
+      "path": "scripts/ci/pr_report.py",
+      "status": "A",
+      "additions": 902,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": "scripts"
+    },
+    {
+      "path": "scripts/ci/release.py",
+      "status": "A",
+      "additions": 168,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": "scripts"
+    },
+    {
+      "path": "scripts/ci/repo_checks.py",
+      "status": "A",
+      "additions": 173,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": "scripts"
+    },
+    {
+      "path": "speech_module/audio_stream.py",
+      "status": "M",
+      "additions": 4,
+      "deletions": 1,
+      "binary": false,
+      "old_path": null,
+      "area": "speech",
+      "component": "audio_stream"
+    },
+    {
+      "path": "speech_module/vosk_engine.py",
+      "status": "M",
+      "additions": 4,
+      "deletions": 1,
+      "binary": false,
+      "old_path": null,
+      "area": "speech",
+      "component": "vosk_engine"
+    },
+    {
+      "path": "tests/central/test_executor.py",
+      "status": "A",
+      "additions": 227,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_intent_catalog.py",
+      "status": "A",
+      "additions": 106,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_intent_engine.py",
+      "status": "A",
+      "additions": 269,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_ipc.py",
+      "status": "A",
+      "additions": 110,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_learning.py",
+      "status": "A",
+      "additions": 213,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_linux_adapter.py",
+      "status": "A",
+      "additions": 214,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_macos_adapter.py",
+      "status": "A",
+      "additions": 173,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_manager.py",
+      "status": "A",
+      "additions": 373,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_nlu.py",
+      "status": "A",
+      "additions": 265,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_nlu_ml.py",
+      "status": "A",
+      "additions": 224,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_normalize.py",
+      "status": "A",
+      "additions": 90,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_os_adapter.py",
+      "status": "A",
+      "additions": 120,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_runners_and_cli.py",
+      "status": "A",
+      "additions": 189,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_supervisor.py",
+      "status": "A",
+      "additions": 183,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_windows_adapter.py",
+      "status": "A",
+      "additions": 196,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/conftest.py",
+      "status": "A",
+      "additions": 95,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "root"
+    },
+    {
+      "path": "tests/gesture/conftest.py",
+      "status": "A",
+      "additions": 34,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/gesture/test_engine_geometry.py",
+      "status": "A",
+      "additions": 298,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/gesture/test_engine_screen.py",
+      "status": "A",
+      "additions": 256,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/gesture/test_gesture_contracts.py",
+      "status": "A",
+      "additions": 185,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/gesture/test_gesture_fsm.py",
+      "status": "A",
+      "additions": 556,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/gesture/test_gesture_output.py",
+      "status": "A",
+      "additions": 295,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/gesture/test_monitors.py",
+      "status": "A",
+      "additions": 127,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/helpers/__init__.py",
+      "status": "A",
+      "additions": 2,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "helpers"
+    },
+    {
+      "path": "tests/helpers/audio.py",
+      "status": "A",
+      "additions": 41,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "helpers"
+    },
+    {
+      "path": "tests/helpers/fakes.py",
+      "status": "A",
+      "additions": 388,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "helpers"
+    },
+    {
+      "path": "tests/helpers/hands.py",
+      "status": "A",
+      "additions": 86,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "helpers"
+    },
+    {
+      "path": "tests/helpers/paths.py",
+      "status": "A",
+      "additions": 39,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "helpers"
+    },
+    {
+      "path": "tests/repo/test_ci_scripts.py",
+      "status": "A",
+      "additions": 513,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "repo"
+    },
+    {
+      "path": "tests/repo/test_fetch_deepfilternet_model.py",
+      "status": "A",
+      "additions": 109,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "repo"
+    },
+    {
+      "path": "tests/repo/test_release_and_workflows.py",
+      "status": "A",
+      "additions": 268,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "repo"
+    },
+    {
+      "path": "tests/speech/conftest.py",
+      "status": "A",
+      "additions": 22,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "speech"
+    },
+    {
+      "path": "tests/speech/test_audio.py",
+      "status": "A",
+      "additions": 256,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "speech"
+    },
+    {
+      "path": "tests/speech/test_calibrate.py",
+      "status": "A",
+      "additions": 87,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "speech"
+    },
+    {
+      "path": "tests/speech/test_denoiser.py",
+      "status": "A",
+      "additions": 194,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "speech"
+    },
+    {
+      "path": "tests/speech/test_routing.py",
+      "status": "A",
+      "additions": 179,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "speech"
+    },
+    {
+      "path": "tests/speech/test_speech_config.py",
+      "status": "A",
+      "additions": 86,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "speech"
+    },
+    {
+      "path": "tests/speech/test_speech_manager.py",
+      "status": "A",
+      "additions": 275,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "speech"
+    },
+    {
+      "path": "tests/speech/test_vad.py",
+      "status": "A",
+      "additions": 194,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "speech"
+    },
+    {
+      "path": "tests/speech/test_vosk_engine.py",
+      "status": "A",
+      "additions": 145,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "speech"
+    },
+    {
+      "path": "tests/speech/test_whisper_engine.py",
+      "status": "A",
+      "additions": 218,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "speech"
+    },
+    {
+      "path": "tests/test_central_module.py",
+      "status": "A",
+      "additions": 114,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "root"
+    }
+  ],
+  "collapsed": {},
+  "commits": [
+    {
+      "sha": "83b3dd9557ba297875c3379826ce8b1ac761df40",
+      "short": "83b3dd9",
+      "author": "CHANDAN B L",
+      "date": "2026-09-22",
+      "subject": "Address Copilot review: token scope, report verdict, test command"
+    },
+    {
+      "sha": "0afc4e4393ef0bc57a507c6cc7c891a70f896855",
+      "short": "0afc4e4",
+      "author": "CHANDAN B L",
+      "date": "2026-09-22",
+      "subject": "Fix CI failures from the first PR run"
+    },
+    {
+      "sha": "34d2fa47c65b45dcde7cd0b4d2cd5d4aa59ab861",
+      "short": "34d2fa4",
+      "author": "CHANDAN B L",
+      "date": "2026-09-22",
+      "subject": "Ignore .claude/ settings in every directory"
+    },
+    {
+      "sha": "a15ffb0e720eca4c5136a5eecfd85848be262c4a",
+      "short": "a15ffb0",
+      "author": "CHANDAN B L",
+      "date": "2026-09-22",
+      "subject": "Add CI, tests, and intent updates"
+    }
+  ]
+}

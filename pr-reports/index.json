@@ -1,4 +1,35 @@
 {
-  "generated_at": "2026-09-22T13:20:55Z",
-  "reports": []
+  "generated_at": "2026-09-22T14:15:10Z",
+  "reports": [
+    {
+      "folder": "PR-0007",
+      "number": 7,
+      "title": "Add CI/CD pipeline, test suite and PR reports",
+      "author": "CHANDU976",
+      "generated_at": "2026-09-22T14:14:56Z",
+      "verdict": "attention",
+      "files": 67,
+      "additions": 10782,
+      "deletions": 42,
+      "tests": {
+        "tests": 4718,
+        "passed": 4620,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 86,
+        "xfailed": 12,
+        "suites": 4
+      },
+      "areas": [
+        "central",
+        "ci",
+        "docs",
+        "gesture",
+        "reports",
+        "speech",
+        "tests"
+      ],
+      "head": "f2698a14d072b6e0c9f4c5d3f46b44577013bced"
+    }
+  ]
 }

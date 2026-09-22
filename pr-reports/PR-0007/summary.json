@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "meta": {
+    "number": 7,
+    "title": "Add CI/CD pipeline, test suite and PR reports",
+    "author": "CHANDU976",
+    "url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/pull/7",
+    "base_ref": "main",
+    "head_ref": "vv2",
+    "event": "push",
+    "run_url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/actions/runs/35738690806",
+    "repository": "CHANDU976/AI_Multimodal_Device_Control_System",
+    "generated_at": "2026-09-22T14:14:56Z"
+  },
+  "range": {
+    "base": "852d94487fee36bae46230a6d3c23f8f70968702",
+    "head": "f2698a14d072b6e0c9f4c5d3f46b44577013bced",
+    "behind": 0
+  },
+  "verdict": "attention",
+  "verdict_reasons": [
+    "Intent catalog changed without a retrained NLU model",
+    "2 new advisory lint finding(s)"
+  ],
+  "totals": {
+    "files": 67,
+    "additions": 10782,
+    "deletions": 42,
+    "commits": 4
+  },
+  "areas": {
+    "central": {
+      "files": 3,
+      "additions": 40,
+      "deletions": 20
+    },
+    "speech": {
+      "files": 2,
+      "additions": 8,
+      "deletions": 2
+    },
+    "gesture": {
+      "files": 1,
+      "additions": 0,
+      "deletions": 17
+    },
+    "tests": {
+      "files": 42,
+      "additions": 8014,
+      "deletions": 0
+    },
+    "ci": {
+      "files": 15,
+      "additions": 2391,
+      "deletions": 0
+    },
+    "docs": {
+      "files": 2,
+      "additions": 305,
+      "deletions": 3
+    },
+    "reports": {
+      "files": 2,
+      "additions": 24,
+      "deletions": 0
+    }
+  },
+  "tests": {
+    "tests": 4718,
+    "passed": 4620,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 86,
+    "xfailed": 12,
+    "suites": 4
+  },
+  "changed_line_coverage": 100.0,
+  "attention": [
+    "Intent catalog changed without a retrained NLU model",
+    "Needs a hands-on check CI cannot do",
+    "CI/tooling changed",
+    "Large change set (10800 lines)"
+  ]
+}
