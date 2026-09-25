@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 import vosk
+import numpy as np
 
 from audio_utils import StreamResampler
 from config import AUDIO, VOSK as VOSK_CFG, VOSK_MODELS, VOSK_DEFAULT_LANG, EVENT_TYPE
