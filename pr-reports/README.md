@@ -19,5 +19,6 @@ developer machine and is git-ignored.
 
 | PR | Title | Author | Verdict | Files | +/− | Tests | Modules | Date |
 | --- | --- | --- | --- | ---: | --- | --- | --- | --- |
+| [#9](PR-0009/README.md) | Implement speech IPC message generation | CHANDU976 | ⚠️ attention | 5 | +158/−22 | 4620✓ 0✗ | central, speech | 2026-09-27 |
 | [#8](PR-0008/README.md) | Bump the actions group with 6 updates | dependabot[bot] | ✅ ready | 3 | +29/−29 | 4620✓ 0✗ | ci | 2026-09-22 |
 | [#7](PR-0007/README.md) | Add CI/CD pipeline, test suite and PR reports | CHANDU976 | ⚠️ attention | 67 | +10782/−42 | 4620✓ 0✗ | central, ci, docs, gesture, reports, speech, tests | 2026-09-22 |

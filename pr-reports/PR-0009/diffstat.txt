@@ -1,0 +1,6 @@
+ central_module/runners/speech_runner.py | 22 +++++++++++++----
+ speech_module/config.py                 | 17 +++++++++++++
+ speech_module/speech_manager.py         | 95 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++------
+ speech_module/vosk_engine.py            | 21 +++++++++-------
+ speech_module/whisper_engine.py         | 25 +++++++++++++++++--
+ 5 files changed, 158 insertions(+), 22 deletions(-)

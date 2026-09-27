@@ -1,0 +1,333 @@
+{
+  "jobs": [
+    {
+      "job": "changes",
+      "title": "Change detection",
+      "result": "success"
+    },
+    {
+      "job": "lint",
+      "title": "Lint (blocking rules)",
+      "result": "success"
+    },
+    {
+      "job": "hygiene",
+      "title": "Repository hygiene",
+      "result": "success"
+    },
+    {
+      "job": "tests",
+      "title": "Tests (all platforms)",
+      "result": "success"
+    },
+    {
+      "job": "ml-tests",
+      "title": "NLU model tests (torch)",
+      "result": "success"
+    },
+    {
+      "job": "deps",
+      "title": "Dependency resolution",
+      "result": "skipped"
+    }
+  ],
+  "tests": [
+    {
+      "label": "tests-macos-latest",
+      "tests": 1564,
+      "passed": 1525,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 35,
+      "xfailed": 4,
+      "time": 18.5,
+      "failures": [],
+      "skip_reasons": {
+        "WindowsAdapter binds user32.dll at import": 31,
+        "collection skipped": 1,
+        "WindowsAdapter binds user32.dll": 1,
+        "real EnumDisplayMonitors": 1,
+        "could not import 'onnxruntime'": 1
+      },
+      "xfails": [
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[press_key:press the {key} key]",
+          "reason": "command_normalize drops 'the', so a non-text pattern containing it never matches"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:double click]",
+          "reason": "command_normalize turns 'double' into '2' before matching"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:click twice]",
+          "reason": "command_normalize turns 'twice' into '2' before matching"
+        },
+        {
+          "test": "tests.repo.test_fetch_deepfilternet_model::test_extract_blocks_sibling_prefix_traversal",
+          "reason": "zip-slip: the guard compares string prefixes, so '../DFN3evil/x' resolves to a SIBLING directory whose path still starts with '.../DFN3'. Compare with Path.is_relative_to(dest.resolve()) instead."
+        }
+      ]
+    },
+    {
+      "label": "ml",
+      "tests": 26,
+      "passed": 13,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 13,
+      "xfailed": 0,
+      "time": 9.8,
+      "failures": [],
+      "skip_reasons": {
+        "Models/NLU/joint-distilbert/joint_nlu.pt is a Git-LFS pointer (run `git lfs pull` to fetch it)": 13
+      },
+      "xfails": []
+    },
+    {
+      "label": "tests-ubuntu-latest",
+      "tests": 1564,
+      "passed": 1525,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 35,
+      "xfailed": 4,
+      "time": 20.2,
+      "failures": [],
+      "skip_reasons": {
+        "WindowsAdapter binds user32.dll at import": 31,
+        "collection skipped": 1,
+        "WindowsAdapter binds user32.dll": 1,
+        "real EnumDisplayMonitors": 1,
+        "could not import 'onnxruntime'": 1
+      },
+      "xfails": [
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[press_key:press the {key} key]",
+          "reason": "command_normalize drops 'the', so a non-text pattern containing it never matches"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:double click]",
+          "reason": "command_normalize turns 'double' into '2' before matching"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:click twice]",
+          "reason": "command_normalize turns 'twice' into '2' before matching"
+        },
+        {
+          "test": "tests.repo.test_fetch_deepfilternet_model::test_extract_blocks_sibling_prefix_traversal",
+          "reason": "zip-slip: the guard compares string prefixes, so '../DFN3evil/x' resolves to a SIBLING directory whose path still starts with '.../DFN3'. Compare with Path.is_relative_to(dest.resolve()) instead."
+        }
+      ]
+    },
+    {
+      "label": "tests-windows-latest",
+      "tests": 1564,
+      "passed": 1557,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 3,
+      "xfailed": 4,
+      "time": 32.3,
+      "failures": [],
+      "skip_reasons": {
+        "collection skipped": 1,
+        "checks the non-Windows guard": 1,
+        "could not import 'onnxruntime'": 1
+      },
+      "xfails": [
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[press_key:press the {key} key]",
+          "reason": "command_normalize drops 'the', so a non-text pattern containing it never matches"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:double click]",
+          "reason": "command_normalize turns 'double' into '2' before matching"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:click twice]",
+          "reason": "command_normalize turns 'twice' into '2' before matching"
+        },
+        {
+          "test": "tests.repo.test_fetch_deepfilternet_model::test_extract_blocks_sibling_prefix_traversal",
+          "reason": "zip-slip: the guard compares string prefixes, so '../DFN3evil/x' resolves to a SIBLING directory whose path still starts with '.../DFN3'. Compare with Path.is_relative_to(dest.resolve()) instead."
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "by_area": {
+      "central": {
+        "statements": 1866,
+        "covered": 1754,
+        "files": 28,
+        "percent": 94.0
+      },
+      "gesture": {
+        "statements": 5083,
+        "covered": 1931,
+        "files": 6,
+        "percent": 38.0
+      },
+      "speech": {
+        "statements": 1434,
+        "covered": 1284,
+        "files": 13,
+        "percent": 89.5
+      }
+    },
+    "changed_lines": {
+      "executable": 48,
+      "covered": 31,
+      "percent": 64.6,
+      "files": [
+        {
+          "path": "central_module/runners/speech_runner.py",
+          "executable": 4,
+          "covered": 2,
+          "percent": 50.0,
+          "uncovered": "88-89"
+        },
+        {
+          "path": "speech_module/config.py",
+          "executable": 1,
+          "covered": 1,
+          "percent": 100.0,
+          "uncovered": ""
+        },
+        {
+          "path": "speech_module/speech_manager.py",
+          "executable": 28,
+          "covered": 13,
+          "percent": 46.4,
+          "uncovered": "148, 158-160, 162-166, 168-169, 287-288, 449, 452"
+        },
+        {
+          "path": "speech_module/vosk_engine.py",
+          "executable": 7,
+          "covered": 7,
+          "percent": 100.0,
+          "uncovered": ""
+        },
+        {
+          "path": "speech_module/whisper_engine.py",
+          "executable": 8,
+          "covered": 8,
+          "percent": 100.0,
+          "uncovered": ""
+        }
+      ]
+    }
+  },
+  "lint": {
+    "blocking": [],
+    "advisory_in_changed_files": [
+      {
+        "path": "central_module/runners/speech_runner.py",
+        "line": 151,
+        "code": "W292",
+        "message": "No newline at end of file"
+      },
+      {
+        "path": "speech_module/config.py",
+        "line": 6,
+        "code": "E501",
+        "message": "Line too long (105 > 100)"
+      },
+      {
+        "path": "speech_module/config.py",
+        "line": 195,
+        "code": "B033",
+        "message": "Sets should not contain duplicate item `\"word\"`"
+      },
+      {
+        "path": "speech_module/config.py",
+        "line": 319,
+        "code": "W292",
+        "message": "No newline at end of file"
+      },
+      {
+        "path": "speech_module/speech_manager.py",
+        "line": 678,
+        "code": "W292",
+        "message": "No newline at end of file"
+      },
+      {
+        "path": "speech_module/vosk_engine.py",
+        "line": 407,
+        "code": "W292",
+        "message": "No newline at end of file"
+      },
+      {
+        "path": "speech_module/whisper_engine.py",
+        "line": 329,
+        "code": "B904",
+        "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling"
+      },
+      {
+        "path": "speech_module/whisper_engine.py",
+        "line": 379,
+        "code": "B904",
+        "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling"
+      },
+      {
+        "path": "speech_module/whisper_engine.py",
+        "line": 471,
+        "code": "W293",
+        "message": "Blank line contains whitespace"
+      },
+      {
+        "path": "speech_module/whisper_engine.py",
+        "line": 483,
+        "code": "W293",
+        "message": "Blank line contains whitespace"
+      },
+      {
+        "path": "speech_module/whisper_engine.py",
+        "line": 493,
+        "code": "W292",
+        "message": "No newline at end of file"
+      }
+    ],
+    "advisory_new": [
+      {
+        "path": "central_module/runners/speech_runner.py",
+        "line": 151,
+        "code": "W292",
+        "message": "No newline at end of file"
+      },
+      {
+        "path": "speech_module/config.py",
+        "line": 319,
+        "code": "W292",
+        "message": "No newline at end of file"
+      },
+      {
+        "path": "speech_module/speech_manager.py",
+        "line": 678,
+        "code": "W292",
+        "message": "No newline at end of file"
+      },
+      {
+        "path": "speech_module/vosk_engine.py",
+        "line": 407,
+        "code": "W292",
+        "message": "No newline at end of file"
+      },
+      {
+        "path": "speech_module/whisper_engine.py",
+        "line": 493,
+        "code": "W292",
+        "message": "No newline at end of file"
+      }
+    ],
+    "advisory_total": 43,
+    "supplied": true
+  },
+  "hygiene": {
+    "base": "ec8f061f90c77f98dbc0b3a5739f79991cbc5f93",
+    "head": "b7562627942ce00cb200a53631d6853632c06591",
+    "files_checked": 5,
+    "errors": [],
+    "warnings": []
+  }
+}

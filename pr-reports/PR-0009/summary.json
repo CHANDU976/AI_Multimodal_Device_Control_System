@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "meta": {
+    "number": 9,
+    "title": "Implement speech IPC message generation",
+    "author": "CHANDU976",
+    "url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/pull/9",
+    "base_ref": "main",
+    "head_ref": "feature/speech-ipc-messages",
+    "event": "push",
+    "run_url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/actions/runs/36297784242",
+    "repository": "CHANDU976/AI_Multimodal_Device_Control_System",
+    "generated_at": "2026-09-27T05:40:09Z"
+  },
+  "range": {
+    "base": "ec8f061f90c77f98dbc0b3a5739f79991cbc5f93",
+    "head": "b7562627942ce00cb200a53631d6853632c06591",
+    "behind": 0
+  },
+  "verdict": "attention",
+  "verdict_reasons": [
+    "Calibrated constants changed",
+    "Source changed without test changes",
+    "5 new advisory lint finding(s)"
+  ],
+  "totals": {
+    "files": 5,
+    "additions": 158,
+    "deletions": 22,
+    "commits": 2
+  },
+  "areas": {
+    "central": {
+      "files": 1,
+      "additions": 17,
+      "deletions": 5
+    },
+    "speech": {
+      "files": 4,
+      "additions": 141,
+      "deletions": 17
+    }
+  },
+  "tests": {
+    "tests": 4718,
+    "passed": 4620,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 86,
+    "xfailed": 12,
+    "suites": 4
+  },
+  "changed_line_coverage": 64.6,
+  "attention": [
+    "Calibrated constants changed",
+    "Source changed without test changes",
+    "Needs a hands-on check CI cannot do"
+  ]
+}

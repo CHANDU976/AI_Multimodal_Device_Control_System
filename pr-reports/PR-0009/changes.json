@@ -1,0 +1,98 @@
+{
+  "areas": [
+    {
+      "area": "central",
+      "title": "Central module (orchestrator + NLU)",
+      "files": 1,
+      "additions": 17,
+      "deletions": 5,
+      "binary": 0,
+      "components": {
+        "runners": 1
+      }
+    },
+    {
+      "area": "speech",
+      "title": "Speech module",
+      "files": 4,
+      "additions": 141,
+      "deletions": 17,
+      "binary": 0,
+      "components": {
+        "config": 1,
+        "speech_manager": 1,
+        "vosk_engine": 1,
+        "whisper_engine": 1
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "central_module/runners/speech_runner.py",
+      "status": "M",
+      "additions": 17,
+      "deletions": 5,
+      "binary": false,
+      "old_path": null,
+      "area": "central",
+      "component": "runners"
+    },
+    {
+      "path": "speech_module/config.py",
+      "status": "M",
+      "additions": 17,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "speech",
+      "component": "config"
+    },
+    {
+      "path": "speech_module/speech_manager.py",
+      "status": "M",
+      "additions": 88,
+      "deletions": 7,
+      "binary": false,
+      "old_path": null,
+      "area": "speech",
+      "component": "speech_manager"
+    },
+    {
+      "path": "speech_module/vosk_engine.py",
+      "status": "M",
+      "additions": 13,
+      "deletions": 8,
+      "binary": false,
+      "old_path": null,
+      "area": "speech",
+      "component": "vosk_engine"
+    },
+    {
+      "path": "speech_module/whisper_engine.py",
+      "status": "M",
+      "additions": 23,
+      "deletions": 2,
+      "binary": false,
+      "old_path": null,
+      "area": "speech",
+      "component": "whisper_engine"
+    }
+  ],
+  "collapsed": {},
+  "commits": [
+    {
+      "sha": "22a824449006cac372b927580fd9272c2ac33e31",
+      "short": "22a8244",
+      "author": "sampadasshetty",
+      "date": "2026-09-26",
+      "subject": "Fix CI: missing numpy import in vosk_engine.py, defensive to_ipc() fallback in speech_runner.py"
+    },
+    {
+      "sha": "76e878294394d78934434ebc36cef8b9d7d0b449",
+      "short": "76e8782",
+      "author": "sampadasshetty",
+      "date": "2026-09-23",
+      "subject": "Implement speech IPC message generation"
+    }
+  ]
+}
