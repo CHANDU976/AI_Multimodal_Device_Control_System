@@ -308,12 +308,14 @@ CONCURRENCY = {
 # "live captions" UI feeling responsive, not the full stream. These knobs
 # collapse consecutive partials down to the minimum that still looks live:
 # identical text is dropped, and nothing goes out faster than the interval
-# below, however fast VOSK is producing partials underneath.
+# below, however fast VOSK is producing partials underneath. The one exception:
+# when an utterance ends, a partial the interval held back is sent at once, so
+# the last caption is never stale.
 #
 # Final events (command / dictation / device / error) are already exactly
 # one message per segment or per state change, so nothing here applies to
 # them.
 IPC = {
-    "partial_dedupe": True,             # drop a partial identical to the last one sent
+    "partial_dedupe": True,             # drop a repeat of this utterance's last partial
     "partial_min_interval_s": 0.15,     # minimum gap between partial IPC messages
 }

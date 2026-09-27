@@ -101,17 +101,20 @@ def test_streaming_loop_emits_partials_and_finals(fake_vosk):
     assert not engine.is_running()
 
 
-def test_preview_mode_drops_finals(fake_vosk):
+def test_preview_mode_drops_finals_but_reports_the_endpoint(fake_vosk):
     out = queue.Queue(maxsize=10)
     audio = queue.Queue()
-    engine = make_engine(audio_queue=audio, result_queue=out, partials_only=True)
+    endpoints = []
+    engine = make_engine(audio_queue=audio, result_queue=out, partials_only=True,
+                         endpoint_callback=lambda: endpoints.append(True))
     fake_vosk.accept = True
     fake_vosk.final = {"text": "should be dropped"}
     engine.start()
     audio.put(b"\x01\x00" * 800)
-    time.sleep(0.3)
+    _wait(lambda: endpoints)
     engine.stop()
     assert out.empty()
+    assert endpoints == [True]          # the utterance end still gets through
 
 
 def test_full_result_queue_drops_the_oldest(fake_vosk):
@@ -129,6 +132,8 @@ def test_callback_errors_do_not_kill_the_loop(fake_vosk):
     engine = make_engine(result_callback=bad)
     from vosk_engine import VoskResult
     engine._emit(VoskResult(event="partial", text="x", is_final=False))   # no raise
+    engine.endpoint_callback = lambda: bad(None)
+    engine._notify_endpoint()                                               # no raise
 
 
 def test_context_manager(fake_vosk):

@@ -125,6 +125,11 @@ class VoskEngine:
     sample_rate : int
         Rate the recogniser runs at. Chunks are resampled from `input_rate`
         to this before AcceptWaveform().
+    endpoint_callback : callable, optional
+        Called on the recognizer thread, with no arguments, each time the
+        streaming recognizer closes an utterance (a VOSK endpoint). In preview
+        mode, where finals are dropped, this is the only end-of-utterance
+        signal.
     """
 
     def __init__(
@@ -136,10 +141,12 @@ class VoskEngine:
         sample_rate: int = AUDIO["target_rate"],
         input_rate: int = AUDIO["capture_rate"],
         partials_only: bool = False,
+        endpoint_callback: Callable[[], None] | None = None,
     ) -> None:
         self.audio_queue = audio_queue
         self.result_callback = result_callback
         self.result_queue = result_queue
+        self.endpoint_callback = endpoint_callback
         self.model_path = model_path
         self.sample_rate = sample_rate
         self.input_rate = input_rate
@@ -326,11 +333,12 @@ class VoskEngine:
                 # denoised audio via recognize_segment().
                 if self.partials_only:
                     self._recognizer.Result()      # consume, discard
-                    continue
-                result = parse_final(json.loads(self._recognizer.Result()),
-                                      model=os.path.basename(self.model_path))
-                if result.text:
-                    self._emit(result)
+                else:
+                    result = parse_final(json.loads(self._recognizer.Result()),
+                                          model=os.path.basename(self.model_path))
+                    if result.text:
+                        self._emit(result)
+                self._notify_endpoint()
             else:
                 # Partial result (still speaking)
                 if VOSK_CFG["partial_results"]:
@@ -368,6 +376,14 @@ class VoskEngine:
                 except queue.Full:
                     pass
                 logger.warning("VoskEngine result_queue full old result dropped")
+
+    def _notify_endpoint(self) -> None:
+        """Tell endpoint_callback the streaming recognizer closed an utterance."""
+        if self.endpoint_callback:
+            try:
+                self.endpoint_callback()
+            except Exception as exc:
+                logger.exception("endpoint_callback raised: %s", exc)
 
     # ── Context-manager support ────────────────────────────────────────────────
 

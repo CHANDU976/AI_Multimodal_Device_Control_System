@@ -22,6 +22,14 @@ def test_result_success_and_repr():
     assert "hello" in repr(ok) and "ERROR: boom" in repr(bad)
 
 
+def test_result_error_keeps_its_positional_slot():
+    # `model` was added after `error`, so pre-existing positional callers
+    # still build a failed result rather than a "successful" one.
+    old_style = WhisperResult("", "", [], 0.0, "Model load failed")
+    assert old_style.error == "Model load failed" and not old_style.success
+    assert old_style.model == ""
+
+
 # ── _load_whisper_model ────────────────────────────────────────────────────────
 
 @pytest.fixture
