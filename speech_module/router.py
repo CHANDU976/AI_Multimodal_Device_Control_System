@@ -23,6 +23,15 @@ Both a mean and a minimum are checked: mean catches a generally poor decode,
 minimum catches a single mangled word in an otherwise clean sentence — which
 for a command is usually the word that matters.
 
+Grammar decodes
+---------------
+Confidence alone cannot be trusted there: VOSK must answer from the grammar,
+and with few competing paths even a wrong answer scores ~1.0. So a grammar
+decode must also BE a command — exactly one config.COMMAND_PHRASES entry,
+politeness fillers aside, no [unk] anywhere. Everyday decoys, a bare opener
+("open [unk]") and chains of loose phrases all go to Whisper. The command
+text sent on is the canonical one ("open note pad" → "open notepad").
+
 Person B — Dictation + Intelligence Layer
 """
 
@@ -33,7 +42,7 @@ import logging
 from dataclasses import dataclass
 
 from classifier import Classifier
-from config import ROUTING, EVENT_TYPE
+from config import ROUTING, EVENT_TYPE, EVERYDAY_PHRASES, FILLER_PHRASES, command_phrases
 from vosk_engine import VoskResult
 
 logger = logging.getLogger(__name__)
@@ -73,23 +82,45 @@ class Router:
         max_command_words: int = ROUTING["max_command_words"],
         max_command_duration_s: float = ROUTING["max_command_duration_s"],
         escalate_on_empty: bool = ROUTING["escalate_on_empty"],
-        max_unk_ratio: float = ROUTING["max_unk_ratio"],
     ) -> None:
         self.min_word_confidence = min_word_confidence
         self.min_mean_confidence = min_mean_confidence
         self.max_command_words = max_command_words
         self.max_command_duration_s = max_command_duration_s
         self.escalate_on_empty = escalate_on_empty
-        self.max_unk_ratio = max_unk_ratio
         # Explicit override on top of the automatic policy: saying a configured
         # trigger phrase forces Whisper even for a short, confident utterance.
         self._classifier = Classifier()
+        # Grammar decodes: spoken command phrase → canonical text, and the
+        # politeness that may wrap one (longest first, so "can you" beats "can").
+        self._commands = command_phrases()
+        self._fillers = sorted((tuple(f.split()) for f in FILLER_PHRASES),
+                               key=len, reverse=True)
 
     def route(self, result: VoskResult) -> Decision:
         text = result.text.strip()
 
         if text and self._classifier.matches_dictation_trigger(text):
             return Decision(EVENT_TYPE["dictation"], "explicit dictation trigger", text)
+
+        # ── Grammar decode: only a complete command phrase may run ─────────────
+        # Any [unk] means part of the utterance was outside the grammar — an
+        # unknown app after "open", or not a command at all.
+        if result.constrained:
+            if result.unk_count:
+                return Decision(
+                    EVENT_TYPE["dictation"],
+                    f"{result.unk_count}/{len(result.words)} words out of vocabulary",
+                    text,
+                )
+            if text:
+                core = self._strip_fillers(text)
+                command = self._commands.get(core)
+                if command is None:
+                    reason = ("everyday speech" if not core or core in EVERYDAY_PHRASES
+                              else "not a single command phrase")
+                    return Decision(EVENT_TYPE["dictation"], reason, text)
+                text = command
 
         # ── Nothing recognised ─────────────────────────────────────────────────
         # The VAD found speech but VOSK produced no words, so something was
@@ -99,22 +130,13 @@ class Router:
                 return Decision(EVENT_TYPE["dictation"], "vosk returned nothing", "")
             return Decision(EVENT_TYPE["command"], "empty, escalation disabled", "")
 
-        # ── Out-of-vocabulary speech (grammar decodes only) ────────────────────
-        # The grammar decoder maps anything outside the command vocabulary to
-        # [unk] — a stronger "this was not a command" signal than any
-        # confidence threshold, because it comes from the decoder itself.
-        if result.unk_count and result.unk_ratio > self.max_unk_ratio:
-            return Decision(
-                EVENT_TYPE["dictation"],
-                f"{result.unk_count}/{len(result.words)} words OOV",
-                text,
-            )
-
         # ── Too long to be a command ───────────────────────────────────────────
-        if result.word_count > self.max_command_words:
+        # Counted on the command itself — fillers already stripped above.
+        word_count = len(text.split())
+        if word_count > self.max_command_words:
             return Decision(
                 EVENT_TYPE["dictation"],
-                f"{result.word_count} words > {self.max_command_words}",
+                f"{word_count} words > {self.max_command_words}",
                 text,
             )
 
@@ -143,9 +165,29 @@ class Router:
         # ── Short and confident → act on it ────────────────────────────────────
         return Decision(
             EVENT_TYPE["command"],
-            f"conf {result.mean_confidence:.2f}, {result.word_count}w",
+            f"conf {result.mean_confidence:.2f}, {word_count}w",
             text,
         )
+
+    def _strip_fillers(self, text: str) -> str:
+        """
+        The command inside the politeness: "can you open chrome please" →
+        "open chrome". Stops as soon as what is left is a command phrase, and
+        returns "" when the utterance was nothing but fillers ("thank you").
+        """
+        words = text.split()
+        while words and " ".join(words) not in self._commands:
+            for filler in self._fillers:
+                n = len(filler)
+                if tuple(words[:n]) == filler:
+                    words = words[n:]
+                    break
+                if tuple(words[-n:]) == filler:
+                    words = words[:-n]
+                    break
+            else:
+                break                               # no filler at either edge
+        return " ".join(words)
 
 
 # ── Smoke-test ────────────────────────────────────────────────────────────────

@@ -70,6 +70,11 @@ FAKE_SPEECH = textwrap.dedent("""
             self.event_type, self.text, self.source, self.metadata = \\
                 event_type, text, source, metadata
 
+        def to_ipc(self):                # the real shape is unit-tested in tests/speech
+            return {"type": self.event_type, "text": self.text, "source": self.source,
+                    "timestamp": 1700000000.123, "model": "vosk-model-small-en-in-0.4",
+                    "confidence": 0.97, "metadata": self.metadata}
+
     class SpeechManager:
         def __init__(self, callback):
             self.cb = callback
@@ -112,7 +117,8 @@ def test_speech_runner_protocol():
     assert proc.returncode == 0, proc.stderr
     events = json_lines(proc.stdout)                    # also proves stdout hygiene
     assert events[0] == {"type": "command", "text": "open chrome", "source": "vosk",
-                         "metadata": {"conf": 0.97}}
+                         "timestamp": 1700000000.123, "model": "vosk-model-small-en-in-0.4",
+                         "confidence": 0.97, "metadata": {"conf": 0.97}}   # to_ipc(), verbatim
     assert events[1] == {"type": "ready"}
     assert events[2] == {"type": "pong"}
     error = events[3]

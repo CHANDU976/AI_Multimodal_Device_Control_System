@@ -69,6 +69,25 @@ def test_model_without_dynamic_graph_falls_back_to_free_decoding(fake_vosk, capl
     assert all(r.grammar is None for r in fake_vosk.recognizers)
 
 
+def test_grammar_phrases_the_model_cannot_say_are_dropped_whole(fake_vosk):
+    # Kaldi would delete just "notepad", leaving a phrase that decodes "open".
+    fake_vosk.missing_words = {"notepad"}
+    engine = make_engine()
+    engine.recognize_segment(b"\x00\x00", grammar=["open notepad", "open note pad",
+                                                   "open chrome", "[unk]"])
+    (rec,) = [r for r in fake_vosk.recognizers if r.grammar is not None]
+    assert rec.grammar == ["open note pad", "open chrome", "[unk]"]
+
+
+def test_results_record_whether_the_grammar_constrained_them(fake_vosk):
+    engine = make_engine()
+    assert engine.recognize_segment(b"\x00\x00", grammar=["open", "[unk]"]).constrained
+    assert not engine.recognize_segment(b"\x00\x00", grammar=None).constrained
+    fake_vosk.reject_grammar = True                     # no dynamic graph
+    rejected = make_engine().recognize_segment(b"\x00\x00", grammar=["open", "[unk]"])
+    assert not rejected.constrained                     # fell back to free decoding
+
+
 def test_switch_model_hot_swaps_and_reprobes(fake_vosk):
     engine = make_engine()
     engine.load_model()
@@ -101,17 +120,20 @@ def test_streaming_loop_emits_partials_and_finals(fake_vosk):
     assert not engine.is_running()
 
 
-def test_preview_mode_drops_finals(fake_vosk):
+def test_preview_mode_drops_finals_but_reports_the_endpoint(fake_vosk):
     out = queue.Queue(maxsize=10)
     audio = queue.Queue()
-    engine = make_engine(audio_queue=audio, result_queue=out, partials_only=True)
+    endpoints = []
+    engine = make_engine(audio_queue=audio, result_queue=out, partials_only=True,
+                         endpoint_callback=lambda: endpoints.append(True))
     fake_vosk.accept = True
     fake_vosk.final = {"text": "should be dropped"}
     engine.start()
     audio.put(b"\x01\x00" * 800)
-    time.sleep(0.3)
+    _wait(lambda: endpoints)
     engine.stop()
     assert out.empty()
+    assert endpoints == [True]          # the utterance end still gets through
 
 
 def test_full_result_queue_drops_the_oldest(fake_vosk):
@@ -129,6 +151,8 @@ def test_callback_errors_do_not_kill_the_loop(fake_vosk):
     engine = make_engine(result_callback=bad)
     from vosk_engine import VoskResult
     engine._emit(VoskResult(event="partial", text="x", is_final=False))   # no raise
+    engine.endpoint_callback = lambda: bad(None)
+    engine._notify_endpoint()                                               # no raise
 
 
 def test_context_manager(fake_vosk):

@@ -6,7 +6,9 @@ protocol" that speech_manager.py's docstrings anticipate.
     stdout (JSON lines, child → central):
         {"type": "ready"}
         {"type": "partial"|"command"|"dictation"|"device"|"error",
-         "text": ..., "source": ..., "metadata": {...}}
+         "text": ..., "source": ..., "timestamp": ...,
+         "model": ..., "confidence": ...,               both only when known
+         "metadata": {...}}                             SpeechEvent.to_ipc()
         {"type": "devices", "devices": [...]}          reply to get_devices
         {"type": "pong"}                               reply to ping
         {"type": "fatal", "error": ...}                unrecoverable, then exit 1
@@ -75,24 +77,8 @@ def main() -> int:
     stop = threading.Event()
 
     def on_event(event: SpeechEvent) -> None:
-        # SpeechEvent.to_ipc() is the fast path — it already returns the
-        # exact JSON-serialisable object for the wire protocol. Fall back to
-        # the original manual shape for anything that doesn't have it (e.g.
-        # a test double that only implements event_type/text/source/
-        # metadata), so this boundary can't crash the runner over an
-        # interface mismatch, and callers that never asked for the richer
-        # fields don't get an unrequested timestamp/model/confidence added
-        # to their wire shape.
-        to_ipc = getattr(event, "to_ipc", None)
-        if callable(to_ipc):
-            emit(to_ipc())
-            return
-        emit({
-            "type": getattr(event, "event_type", None),
-            "text": getattr(event, "text", ""),
-            "source": getattr(event, "source", ""),
-            "metadata": getattr(event, "metadata", {}) or {},
-        })
+        # SpeechEvent owns the wire shape; the runner forwards it verbatim.
+        emit(event.to_ipc())
 
     try:
         manager = SpeechManager(callback=on_event)

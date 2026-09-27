@@ -49,8 +49,8 @@ Other automation:
 - **`CODEOWNERS`** is a ready template: fill in the GitHub handles to get
   automatic review requests per module.
 
-Test jobs check out the repository sparsely, without the ~30k-file committed
-`.venv`. They also skip Git LFS: the ~1 GB of model weights arrive as pointer
+Test jobs check out the repository sparsely, only the code and data the tests
+read. They also skip Git LFS: the ~1 GB of model weights arrive as pointer
 files, and the few tests that need real weights skip themselves (see
 `models` below).
 
@@ -142,8 +142,8 @@ After that, the report covers:
 - the known defects the suite pins (xfails)
 - commits and every changed file
 
-The committed `.venv` is summarised rather than listed, so a
-virtualenv update doesn't bury the report.
+`.venv` is git-ignored; if a PR still adds files under it, they are
+summarised rather than listed, so a virtualenv doesn't bury the report.
 
 ## The test suite
 

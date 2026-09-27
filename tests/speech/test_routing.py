@@ -107,11 +107,16 @@ def test_result_repr():
 
 # ── Router ─────────────────────────────────────────────────────────────────────
 
-def result(text, mean=0.95, lo=0.9, dur=1.0, words=None, unk=0):
+def result(text, mean=0.95, lo=0.9, dur=1.0, words=None, unk=0, constrained=False):
     words = words if words is not None else [word(w) for w in text.split()]
     return VoskResult(event="command", text=text, is_final=True, words=words,
                       mean_confidence=mean, min_confidence=lo, duration_s=dur,
-                      unk_count=unk, unk_ratio=(unk / len(words)) if words else 0.0)
+                      unk_count=unk, unk_ratio=(unk / len(words)) if words else 0.0,
+                      constrained=constrained)
+
+
+def grammar_decode(text, **kw):
+    return result(text, constrained=True, **kw)
 
 
 @pytest.fixture
@@ -157,16 +162,59 @@ def test_empty_decode_escalates_by_default(router):
     assert not quiet.escalate and quiet.text == ""
 
 
-def test_oov_share_escalates(router):
-    # "open <unknown app>": half the words OOV → Whisper.
-    d = router.route(result("open", words=[word("open"), word("[unk]")], unk=1))
-    assert d.escalate and "OOV" in d.reason
+# ── Grammar decodes: only a complete command phrase runs ───────────────────────
+
+def test_grammar_command_phrase_stays_on_fast_path(router):
+    d = router.route(grammar_decode("scroll down three times"))
+    assert not d.escalate and d.text == "scroll down three times"
 
 
-def test_one_stray_unk_is_tolerated(router):
-    # A breath decoded as [unk] next to a two-word command: 1/3 < 0.34.
-    words = [word("open"), word("chrome"), word("[unk]")]
-    assert not router.route(result("open chrome", words=words, unk=1)).escalate
+@pytest.mark.parametrize("heard, sent", [
+    ("can you open chrome please", "open chrome"),
+    ("hey computer close the window now", "close the window"),
+    ("i want you to turn up the volume for me", "turn up the volume"),
+])
+def test_fillers_around_a_command_are_dropped(router, heard, sent):
+    d = router.route(grammar_decode(heard))
+    assert not d.escalate and d.text == sent
+
+
+def test_spelled_words_are_sent_canonical(router):
+    # The small en-in model has no "notepad"; the grammar spells it.
+    assert router.route(grammar_decode("please open note pad")).text == "open notepad"
+    assert router.route(grammar_decode("press f five")).text == "press f5"
+
+
+@pytest.mark.parametrize("heard, reason", [
+    ("how are you", "everyday speech"),               # a decoy
+    ("thank you", "everyday speech"),                 # nothing but fillers
+    ("nine to", "not a single command phrase"),       # loose phrases chained
+    ("left click scroll down", "not a single command phrase"),   # two commands
+    ("open", "not a single command phrase"),          # an opener on its own
+])
+def test_grammar_decodes_that_are_not_one_command_escalate(router, heard, reason):
+    d = router.route(grammar_decode(heard))       # confidence 0.95: irrelevant
+    assert d.escalate and d.reason == reason
+
+
+def test_any_unk_in_a_grammar_decode_escalates(router):
+    # "open sesame" → "open [unk]": acting on "open" alone would be a guess.
+    d = router.route(grammar_decode("open chrome", words=[word("open"), word("chrome"),
+                                                         word("[unk]")], unk=1))
+    assert d.escalate and d.reason == "1/3 words out of vocabulary"
+    only_unk = router.route(grammar_decode("", words=[word("[unk]")], unk=1))
+    assert only_unk.escalate and "out of vocabulary" in only_unk.reason
+
+
+def test_grammar_command_still_needs_confidence(router):
+    d = router.route(grammar_decode("open chrome", lo=ROUTING["min_word_confidence"] - 0.01))
+    assert d.escalate and "weakest word" in d.reason
+
+
+def test_free_decodes_are_not_held_to_the_phrase_list(router):
+    # Hindi, or a model without a dynamic graph: no grammar was used, so the
+    # confidence rules alone decide — as before.
+    assert not router.route(result("chrome kholo")).escalate
 
 
 def test_custom_thresholds(router):

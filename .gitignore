@@ -20,7 +20,13 @@ pr-reports/local/
 # No leading slash: ignored at every level of the tree.
 .claude/
 
-# Bytecode. (Files already tracked stay tracked until someone runs
-# `git rm -r --cached` on them — this only stops new ones being added.)
+# Bytecode.
 __pycache__/
 *.py[cod]
+
+# Audio the speech tools write while you work: denoiser.py's self-test
+# (into the current directory) and calibrate.py --record (personal voice
+# recordings, into the folder you name — clips/ in its usage text).
+dfn3_noisy.wav
+dfn3_clean.wav
+clips/

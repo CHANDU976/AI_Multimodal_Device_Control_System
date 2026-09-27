@@ -1,6 +1,8 @@
 # config.py — Central configuration for the Speech Module
 
+import itertools
 import os
+import re
 
 # ── Base model directory (relative to project root) ────────────────────────────
 _MODELS_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Models"))
@@ -171,55 +173,283 @@ COMMAND_PREFIXES = {
 }
 
 # ── VOSK command grammar ───────────────────────────────────────────────────────
-# Restricting the per-segment decoder to a known vocabulary makes in-vocabulary
-# commands dramatically more accurate, and gives routing a clean OOV signal:
-# anything outside the vocabulary decodes as "[unk]" instead of being
-# force-fitted onto the nearest-sounding command.
+# The per-segment VOSK decode is constrained to the phrases below. That makes
+# in-vocabulary commands far more accurate — but a closed vocabulary also means
+# VOSK always answers with *something* from it, and with few competing paths
+# that answer scores ~1.0 however poor the acoustic match. A bag of loose words
+# let "the weather is nice today" come out as "nine to" at confidence 1.0.
 #
-# Words the model's lexicon lacks are silently dropped from the grammar by
-# Kaldi, and models without a dynamic graph reject grammars entirely — the
-# engine probes for that at first use and falls back to free decoding.
+# So the grammar gives every kind of speech an honest place to land:
 #
-# The streaming preview recognizer never uses the grammar; partials keep
-# showing arbitrary speech.
-
-# Things commands act on / with. Extend freely — this is the list the central
-# module's set_vocabulary control message will replace at runtime later.
-COMMAND_TARGETS = {
-    # apps & surfaces
-    "chrome", "browser", "notepad", "explorer", "terminal", "settings",
-    "calculator", "spotify", "youtube", "google", "whatsapp", "word", "excel",
-    # ui nouns
-    "window", "tab", "file", "folder", "page", "menu", "desktop", "screen",
-    "volume", "brightness", "music", "video", "process", "task", "manager",
-    "text", "line", "word", "all",
-    # directions & steps
-    "up", "down", "left", "right", "next", "previous", "back", "forward",
-    "top", "bottom", "home", "end",
-    # small numbers
-    "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
-    "ten", "double", "half",
-    # frequent glue words so natural phrasing survives the grammar
-    "the", "a", "to", "on", "off", "in", "out", "this", "that", "please",
-    "mute", "unmute", "play", "pause", "stop", "start", "enter", "escape",
-    "space", "shift", "control",
-}
+#   COMMAND_PHRASES      complete commands — action + target — grouped by the
+#                        central_module intent they trigger. The ONLY way onto
+#                        the fast path is decoding to exactly one of these,
+#                        optionally wrapped in FILLER_PHRASES (router.py).
+#   OPEN_ENDED_PREFIXES  command openers whose object the grammar can't list —
+#                        a search, a website, an app it doesn't know. They let
+#                        "open sesame" decode as "open [unk]" (→ Whisper)
+#                        instead of being forced onto "open gmail".
+#   FILLER_PHRASES       politeness around a command: "can you … please".
+#   EVERYDAY_PHRASES     common speech that is not a command. Decoys: they can
+#                        only ever send an utterance to Whisper, never run one.
+#   "[unk]"              anything else.
+#
+# Small VOSK models lack some words ("notepad", "unmute", "f1"). SPOKEN_FORMS
+# spells those with words the model has, and the router maps the decode back
+# to the canonical word. Phrases a model still can't say are dropped whole by
+# VoskEngine — left to Kaldi, it deletes just the missing word, turning
+# "open notepad" into "open".
+#
+# Models without a dynamic graph reject grammars entirely; the engine probes
+# for that at first use and falls back to free decoding. The streaming preview
+# recognizer never uses the grammar, so partials keep showing arbitrary speech.
 
 GRAMMAR = {
     "enabled": True,
 }
 
+# Values for the {slot} placeholders in COMMAND_PHRASES. Canonical spellings —
+# SPOKEN_FORMS covers the ones a model can't say.
+GRAMMAR_SLOTS = {
+    # Every app name the Windows, Linux and macOS adapters can launch
+    # (APP_COMMANDS in central_module/actions/*_adapter.py).
+    "app": (
+        "browser", "calc", "calculator", "chrome", "cmd", "code", "command prompt",
+        "control panel", "edge", "excel", "explorer", "file explorer", "files",
+        "finder", "firefox", "gmail", "google", "google chrome", "notepad", "notes",
+        "outlook", "paint", "powerpoint", "powershell", "safari", "settings",
+        "spotify", "task manager", "terminal", "visual studio code", "vs code",
+        "whatsapp", "word", "youtube",
+    ),
+    "direction": ("up", "down", "left", "right", "top", "bottom"),
+    # Key names from central KEY_ALIASES. Digits are spoken as words (the
+    # central normaliser turns "five" into 5); the letter "a" is left out
+    # because the normaliser drops it as an article.
+    "key": (
+        "alt", "backspace", "caps lock", "command", "control", "delete", "down",
+        "down arrow", "end", "enter", "escape", "home", "insert", "left",
+        "left arrow", "option", "page down", "page up", "print screen", "return",
+        "right", "right arrow", "shift", "space", "spacebar", "super", "tab", "up",
+        "up arrow", "windows", "windows key",
+        "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
+        "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
+        "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    ),
+    "count": ("one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"),
+    # Volume levels, in steps of five.
+    "number": (
+        "zero", "five", "ten", "fifteen", "twenty", "twenty five", "thirty",
+        "thirty five", "forty", "forty five", "fifty", "fifty five", "sixty",
+        "sixty five", "seventy", "seventy five", "eighty", "eighty five", "ninety",
+        "ninety five", "one hundred",
+    ),
+    # Spoken language names — central_module/config.py LANGUAGES.
+    "language": ("english", "indian english", "american english", "hindi"),
+}
+
+# Every command the fast path may act on, by central intent name. The catalog
+# wording (central_module/nlp/intents.py) plus natural variants the central
+# normaliser reduces to it ("close the window" → "close window").
+# tests/speech/test_speech_config.py checks every phrase against the catalog.
+COMMAND_PHRASES = {
+    "open_app": ("open {app}", "open the {app}", "launch {app}", "start {app}",
+                 "run {app}", "edit {app}"),
+    "press_key": ("press {key}", "hit {key}", "tap {key}", "press key {key}"),
+    "copy": ("copy", "copy this", "copy that"),
+    "paste": ("paste", "paste it", "paste here"),
+    "cut": ("cut", "cut this"),
+    "select_all": ("select all", "select everything"),
+    "undo": ("undo", "undo that"),
+    "redo": ("redo", "redo that"),
+    "save": ("save", "save file", "save this file", "save the file"),
+    "delete": ("delete", "delete this", "delete that", "delete selection",
+               "delete the selection"),
+    "scroll": ("scroll {direction}", "scroll {direction} {count}",
+               "scroll {direction} {count} times", "scroll to {direction}",
+               "scroll to the {direction}"),
+    "click": ("click", "left click", "click here"),
+    "double_click": ("double click", "click twice"),
+    "right_click": ("right click", "context menu"),
+    "volume_up": ("volume up", "increase volume", "raise volume", "louder",
+                  "turn up volume", "turn volume up", "turn up the volume",
+                  "turn the volume up", "increase the volume", "raise the volume",
+                  "volume up {count}", "volume up by {count}",
+                  "increase volume by {count}", "raise volume by {count}",
+                  "turn volume up by {count}"),
+    "volume_down": ("volume down", "decrease volume", "lower volume", "quieter",
+                    "turn down volume", "turn volume down", "turn down the volume",
+                    "turn the volume down", "decrease the volume", "lower the volume",
+                    "volume down {count}", "volume down by {count}",
+                    "decrease volume by {count}", "lower volume by {count}",
+                    "turn volume down by {count}"),
+    "mute": ("mute", "mute volume", "mute the volume", "silence"),
+    "unmute": ("unmute", "unmute volume", "unmute the volume", "sound on"),
+    "set_volume": ("set volume to {number}", "set the volume to {number}",
+                   "set volume {number}", "volume {number} percent",
+                   "volume to {number}", "increase volume to {number}",
+                   "raise volume to {number}", "decrease volume to {number}",
+                   "lower volume to {number}"),
+    "play_pause": ("play", "pause", "play pause", "resume", "play music", "pause music",
+                   "stop music", "play the music", "pause the music", "stop the music"),
+    "next_track": ("next track", "next song", "skip song", "skip track",
+                   "skip the song"),
+    "prev_track": ("previous track", "previous song", "last song", "go back song"),
+    "minimize": ("minimize", "minimize window", "minimize the window", "minimize this"),
+    "maximize": ("maximize", "maximize window", "maximize the window", "full screen"),
+    "close_window": ("close window", "close the window", "close this window",
+                     "close current window", "close the current window"),
+    "switch_window": ("switch window", "switch windows", "next window", "change window",
+                      "switch the window", "change the window"),
+    "show_desktop": ("show desktop", "show the desktop", "go to desktop",
+                     "go to the desktop"),
+    "new_tab": ("new tab", "open new tab", "open a new tab"),
+    "close_tab": ("close tab", "close the tab", "close this tab"),
+    "next_tab": ("next tab", "switch tab", "the next tab"),
+    "prev_tab": ("previous tab", "last tab", "the previous tab"),
+    "browser_back": ("go back", "navigate back", "back page"),
+    "browser_forward": ("go forward", "navigate forward", "forward page"),
+    "refresh": ("refresh", "reload", "refresh page", "reload page", "refresh the page",
+                "reload the page"),
+    "screenshot": ("take screenshot", "take a screenshot", "screenshot",
+                   "capture screen", "capture the screen"),
+    "lock": ("lock screen", "lock the screen", "lock computer", "lock the computer",
+             "lock my computer", "lock pc"),
+    "brightness_up": ("brightness up", "increase brightness", "increase the brightness",
+                      "brighter screen"),
+    "brightness_down": ("brightness down", "decrease brightness",
+                        "decrease the brightness", "dim screen", "dim the screen"),
+    "sleep": ("go to sleep", "sleep computer", "suspend"),
+    "shutdown": ("shut down", "shutdown", "shut down computer", "shut down the computer",
+                 "power off", "turn off computer", "turn off the computer"),
+    "restart": ("restart", "reboot", "restart computer", "restart the computer",
+                "reboot computer", "reboot the computer"),
+    "set_language": ("switch language to {language}", "change language to {language}",
+                     "set language to {language}"),
+    "start_dictation": ("start dictation", "start dictating", "begin dictation",
+                        "dictation mode"),
+    "stop_dictation": ("stop dictation", "end dictation", "stop typing",
+                       "cancel dictation", "exit dictation"),
+    # Answers to "are you sure?" — central CONFIRM_WORDS / CANCEL_WORDS.
+    "confirm": ("yes", "yeah", "sure", "confirm", "go ahead", "do it"),
+    "cancel": ("no", "don't", "cancel", "never mind", "abort"),
+}
+
+# Command openers whose object may be outside the grammar. Never a command on
+# their own: "<opener> [unk]" always goes to Whisper for the free text.
+OPEN_ENDED_PREFIXES = {
+    "open", "open the", "launch", "start", "run", "edit",
+    "press", "hit", "tap", "press key",
+    "search", "search for", "search the web for", "search google for", "google",
+    "look up", "go to", "open website", "visit", "type", "write",
+    "switch language to", "change language to", "set language to",
+}
+
+# Politeness that may wrap a command; the router strips it before matching.
+FILLER_PHRASES = {
+    "please", "kindly", "hey", "hey computer", "okay", "ok",
+    "can you", "could you", "would you", "will you", "i want to", "i want you to",
+    "just", "now", "for me", "thanks", "thank you",
+}
+
+# Everyday speech that is not a command — what gets said near a microphone:
+# greetings, reactions, hesitation, questions, mic checks. Deliberately
+# includes near-misses of real commands ("shut up" / "shut down", "be quiet" /
+# "quieter", "stop talking" / "stop typing") so those have a non-command
+# landing spot. Must never contain a command phrase.
+EVERYDAY_PHRASES = {
+    # greetings
+    "hello", "hi", "hi there", "hello there", "hey there", "good morning",
+    "good afternoon", "good evening", "good night", "bye", "bye bye", "goodbye",
+    "see you", "see you later", "see you soon", "take care", "nice to meet you",
+    "welcome",
+    # reactions
+    "alright", "all right", "fine", "cool", "great", "nice", "good", "very good",
+    "awesome", "perfect", "excellent", "amazing", "wow", "oh", "oh no", "oh my god",
+    "oops", "hmm", "um", "uh", "ah", "aha", "i see", "got it", "i got it",
+    "makes sense", "that's right", "exactly", "of course", "right", "true",
+    "interesting", "really", "seriously", "no way", "come on", "that's it",
+    "that's fine", "that's good", "not bad", "me too", "why not",
+    # thanks and apologies
+    "thank you so much", "thanks a lot", "you're welcome", "no problem",
+    "no worries", "sorry", "i'm sorry", "excuse me", "pardon", "pardon me", "my bad",
+    # hesitation
+    "wait", "wait a second", "wait a minute", "hold on", "one second", "one moment",
+    "just a moment", "give me a second", "let me think", "let me see", "let me check",
+    "i don't know", "i'm not sure", "maybe", "maybe later", "not now", "later",
+    "i think so", "i guess", "well", "anyway", "so", "and then", "what else",
+    # questions
+    "what", "why", "how", "when", "where", "who", "what is it", "what is this",
+    "what is that", "what's up", "what's that", "what happened", "what do you mean",
+    "what time is it", "what's the time", "what day is it", "how are you",
+    "how is it going", "who is it", "who is this", "where is it", "where are you",
+    "is it working", "does it work", "are you there", "are you listening",
+    "can you hear me", "do you understand", "did you hear that", "are you sure",
+    "is that right",
+    # mic checks
+    "test", "testing", "testing testing", "mic check", "check check", "hello hello",
+    "testing one two three",
+    # statements
+    "i'm here", "i am here", "i'm back", "i'm done", "i'm ready", "let's go",
+    "it's working", "it is working", "it's not working", "this is good",
+    "try again", "one more time", "again", "come here", "look at this",
+    "shut up", "be quiet", "calm down", "slow down", "sit down",
+    "stop it", "stop that", "stop talking",       # vs "stop typing" / "stop music"
+}
+
+# Spellings for canonical words small VOSK models lack. The decode comes back
+# spelled ("open note pad") and the router restores the canonical word.
+SPOKEN_FORMS = {
+    "notepad": ("note pad",),
+    "powershell": ("power shell",),
+    "firefox": ("fire fox",),
+    "whatsapp": ("whats app", "what's app"),
+    "cmd": ("c m d",),
+    "backspace": ("back space",),
+    "spacebar": ("space bar",),
+    "unmute": ("un mute",),
+    "f1": ("f one",), "f2": ("f two",), "f3": ("f three",), "f4": ("f four",),
+    "f5": ("f five",), "f6": ("f six",), "f7": ("f seven",), "f8": ("f eight",),
+    "f9": ("f nine",), "f10": ("f ten",), "f11": ("f eleven",), "f12": ("f twelve",),
+}
+
+
+def command_phrases() -> dict[str, str]:
+    """
+    Every spoken command phrase the grammar accepts → the canonical text to act
+    on: slots expanded from GRAMMAR_SLOTS, SPOKEN_FORMS spellings included and
+    mapped back ("open note pad" → "open notepad").
+    """
+    phrases: dict[str, str] = {}
+    for templates in COMMAND_PHRASES.values():
+        for template in templates:
+            for text in _expand_slots(template):
+                spellings = [(w, *SPOKEN_FORMS.get(w, ())) for w in text.split()]
+                for spoken in itertools.product(*spellings):
+                    phrases.setdefault(" ".join(spoken), text)
+    return phrases
+
+
+def _expand_slots(template: str) -> list[str]:
+    names = re.findall(r"\{(\w+)\}", template)
+    texts = []
+    for values in itertools.product(*(GRAMMAR_SLOTS[n] for n in names)):
+        text = template
+        for name, value in zip(names, values):
+            text = text.replace("{" + name + "}", value, 1)
+        texts.append(text)
+    return texts
+
 
 def command_grammar() -> list[str]:
     """
-    Phrase list for VOSK's grammar-constrained command decode: every command
-    word plus the mode-switch phrases (which must stay recognisable or the
-    explicit dictation trigger could never fire), plus "[unk]" so
-    out-of-vocabulary speech surfaces as [unk] tokens instead of being
-    mis-recognised as a command.
+    Phrase list for VOSK's grammar-constrained segment decode: every command
+    phrase, the open-ended openers, fillers, everyday decoys and the mode-switch
+    phrases (the explicit dictation trigger must stay recognisable), plus
+    "[unk]" for everything else.
     """
-    phrases: set[str] = set()
-    phrases |= COMMAND_PREFIXES | COMMAND_TARGETS
+    phrases = set(command_phrases())
+    phrases |= OPEN_ENDED_PREFIXES | FILLER_PHRASES | EVERYDAY_PHRASES
     phrases |= DICTATION_TRIGGERS | DICTATION_STOP_WORDS
     return sorted(phrases) + ["[unk]"]
 
@@ -271,11 +501,8 @@ ROUTING = {
     "max_command_words": 8,         # longer than this is prose, not a command
     "max_command_duration_s": 4.0,
     "escalate_on_empty": True,      # VOSK heard nothing → let Whisper try anyway
-    # Share of [unk] tokens (grammar decode only) above which the utterance is
-    # not a command. A third tolerates one stray [unk] — a breath or keyboard
-    # click — alongside a two-word command, while "open <unknown app>" (1/2)
-    # still escalates.
-    "max_unk_ratio": 0.34,
+    # Grammar decodes additionally must be exactly one COMMAND_PHRASES entry
+    # (fillers aside) with no [unk] at all — see router.py.
 }
 
 # ── Mode enum-like mapping ─────────────────────────────────────────────────────
@@ -308,12 +535,14 @@ CONCURRENCY = {
 # "live captions" UI feeling responsive, not the full stream. These knobs
 # collapse consecutive partials down to the minimum that still looks live:
 # identical text is dropped, and nothing goes out faster than the interval
-# below, however fast VOSK is producing partials underneath.
+# below, however fast VOSK is producing partials underneath. The one exception:
+# when an utterance ends, a partial the interval held back is sent at once, so
+# the last caption is never stale.
 #
 # Final events (command / dictation / device / error) are already exactly
 # one message per segment or per state change, so nothing here applies to
 # them.
 IPC = {
-    "partial_dedupe": True,             # drop a partial identical to the last one sent
+    "partial_dedupe": True,             # drop a repeat of this utterance's last partial
     "partial_min_interval_s": 0.15,     # minimum gap between partial IPC messages
 }

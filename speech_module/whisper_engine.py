@@ -47,8 +47,10 @@ class WhisperResult:
     language: str
     segments: list[dict]
     duration_s: float       # inference wall-time
-    model: str = ""          # e.g. "faster-whisper-small" — which model produced this
     error: str | None = None
+    # Appended after `error`, never before it: WhisperResult(..., "load failed")
+    # must still mean a failed result, not a model name.
+    model: str = ""         # e.g. "faster-whisper-small" — which model produced this
 
     @property
     def success(self) -> bool:

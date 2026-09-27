@@ -241,9 +241,10 @@ class SpeechManager:
         # Per-request Whisper language override; None = config default.
         self._whisper_language: str | None = None
 
-        # Partial-message throttling (IPC minimisation) — see config.IPC.
-        self._last_partial_text: str | None = None
-        self._last_partial_emit_ts: float = 0.0
+        # Partial-message throttling (IPC minimisation) — see config.IPC. Only
+        # touched on the VoskEngine thread (partials and endpoints both
+        # arrive there), so no lock.
+        self._reset_partial_state()
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -262,6 +263,7 @@ class SpeechManager:
         kwargs = {
             "audio_queue": self._preview_queue,
             "result_callback": self._on_preview_result,
+            "endpoint_callback": self._on_preview_endpoint,
             "partials_only": True,
         }
         if self._vosk_model_path:
@@ -284,8 +286,7 @@ class SpeechManager:
         # ── Go ─────────────────────────────────────────────────────────────────
         self._running.set()
         self._vad.reset()
-        self._last_partial_text = None
-        self._last_partial_emit_ts = 0.0
+        self._reset_partial_state()
         self._vad_thread = threading.Thread(target=self._vad_loop, name="VADThread", daemon=True)
         self._process_thread = threading.Thread(
             target=self._process_loop, name="SegmentThread", daemon=True
@@ -440,19 +441,40 @@ class SpeechManager:
             return
 
         # ── Minimise IPC traffic ────────────────────────────────────────────
-        # VOSK's preview recognizer produces many partials per utterance.
-        # Collapse them: skip text identical to the last partial sent, and
-        # never send faster than IPC["partial_min_interval_s"] — the newest
-        # text always wins once the interval has passed, so nothing usable
-        # for a live-captions UI is lost, only the redundant repeats.
+        # VOSK's preview recognizer re-reports the current partial on every
+        # audio chunk. Collapse them: skip text identical to the last partial
+        # sent this utterance, and never send faster than
+        # IPC["partial_min_interval_s"]. A partial held back by the interval
+        # is kept as pending — the next chunk carries the same or newer text
+        # and sends it once the interval has passed, and if the utterance ends
+        # first, _on_preview_endpoint() sends it. Either way a live-captions
+        # consumer ends up on the newest text, only the repeats are dropped.
         if IPC["partial_dedupe"] and result.text == self._last_partial_text:
+            self._pending_partial = None        # newest text is already out
             return
-        now = time.time()
+        now = time.monotonic()
         if now - self._last_partial_emit_ts < IPC["partial_min_interval_s"]:
+            self._pending_partial = result
             return
+        self._send_partial(result, now)
+
+    def _on_preview_endpoint(self) -> None:
+        """VoskEngine thread: the preview recognizer closed an utterance."""
+        if self._pending_partial is not None:
+            self._send_partial(self._pending_partial, time.monotonic())
+        # The next utterance starts from scratch: saying the same words again
+        # must produce a partial again, not be deduped against this one.
+        self._last_partial_text = None
+
+    def _reset_partial_state(self) -> None:
+        self._last_partial_text: str | None = None
+        self._last_partial_emit_ts: float = float("-inf")
+        self._pending_partial: VoskResult | None = None
+
+    def _send_partial(self, result: VoskResult, now: float) -> None:
+        self._pending_partial = None
         self._last_partial_text = result.text
         self._last_partial_emit_ts = now
-
         self._emit(SpeechEvent(
             event_type=EVENT_TYPE["partial"],
             text=result.text,
