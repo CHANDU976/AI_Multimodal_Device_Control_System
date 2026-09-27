@@ -172,7 +172,7 @@ jobs:
       run:
         shell: bash
     steps:
-      # Sparse + blob-filtered: skips the ~30k-file committed .venv, and model
+      # Sparse + blob-filtered: only the code and data the tests read, and model
       # weights arrive as Git LFS pointers (tests needing real weights skip).
       - uses: actions/checkout@v7
         with:
