@@ -15,13 +15,12 @@ import json
 import queue
 import threading
 import logging
+import os
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable
+from typing import Callable
 
 import vosk
-
-if TYPE_CHECKING:               # annotations only
-    import numpy as np
+import numpy as np
 
 from audio_utils import StreamResampler
 from config import AUDIO, VOSK as VOSK_CFG, VOSK_MODELS, VOSK_DEFAULT_LANG, EVENT_TYPE
@@ -50,6 +49,9 @@ class VoskResult:
     unk_count: int = 0
     unk_ratio: float = 0.0
 
+    # Which VOSK model produced this result (e.g. "vosk-model-small-en-in-0.4").
+    model: str = ""
+
     @property
     def word_count(self) -> int:
         return len(self.text.split())
@@ -63,7 +65,7 @@ class VoskResult:
                 f"{self.duration_s:.1f}s)")
 
 
-def parse_final(raw: dict, duration_s: float = 0.0) -> VoskResult:
+def parse_final(raw: dict, duration_s: float = 0.0, model: str = "") -> VoskResult:
     """
     Build a VoskResult from VOSK's final-result JSON.
 
@@ -97,6 +99,7 @@ def parse_final(raw: dict, duration_s: float = 0.0) -> VoskResult:
         duration_s=duration_s,
         unk_count=unk_count,
         unk_ratio=unk_count / len(words) if words else 0.0,
+        model=model,
     )
 
 
@@ -293,7 +296,7 @@ class VoskEngine:
                 self._seg_rec.Reset()
             self._seg_rec.AcceptWaveform(data)
             raw = json.loads(self._seg_rec.FinalResult())
-        result = parse_final(raw, duration_s=duration_s)
+        result = parse_final(raw, duration_s=duration_s, model=os.path.basename(self.model_path))
         logger.debug("Segment recognised: %r", result)
         return result
 
@@ -324,7 +327,8 @@ class VoskEngine:
                 if self.partials_only:
                     self._recognizer.Result()      # consume, discard
                     continue
-                result = parse_final(json.loads(self._recognizer.Result()))
+                result = parse_final(json.loads(self._recognizer.Result()),
+                                      model=os.path.basename(self.model_path))
                 if result.text:
                     self._emit(result)
             else:
@@ -338,6 +342,7 @@ class VoskEngine:
                             text=text,
                             is_final=False,
                             raw=raw,
+                            model=os.path.basename(self.model_path),
                         )
                         self._emit(result)
 

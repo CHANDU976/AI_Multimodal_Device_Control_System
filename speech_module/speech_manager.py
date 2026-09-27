@@ -75,7 +75,7 @@ from vad import Segment, create_vad
 from vosk_engine import VoskEngine, VoskResult
 from whisper_engine import WhisperEngine, WhisperResult
 from config import (
-    AUDIO, EVENT_TYPE, CONCURRENCY, DEVICE_MONITOR, GRAMMAR, VOSK_MODELS,
+    AUDIO, EVENT_TYPE, CONCURRENCY, DEVICE_MONITOR, GRAMMAR, IPC, VOSK_MODELS,
     WHISPER_LANG, command_grammar,
 )
 
@@ -92,26 +92,81 @@ class SpeechEvent:
     Attributes
     ----------
     event_type : str
-        One of EVENT_TYPE values: 'partial', 'command', 'dictation', 'error'
+        One of EVENT_TYPE values: 'partial', 'command', 'dictation', 'error'.
+        This is also the message's IPC classification — the speech module
+        does not invent a separate taxonomy for the wire format.
     text : str
         Recognised or transcribed text.
     source : str
-        'vosk' or 'whisper' — which engine produced this text.
+        'vosk' or 'whisper' — which model produced this text (or 'audio' /
+        'pipeline' / 'runner' for non-recognition events).
     mode : str
         Retained for API compatibility; mirrors event_type now that routing is
         per-utterance rather than a sticky mode.
     metadata : dict
-        Confidence, routing reason, timings, denoise flag.
+        Confidence, routing reason, timings, denoise flag, etc.
+    timestamp : float
+        Epoch seconds when the event was created. Lets a consumer order and
+        correlate events (e.g. against gesture events) without depending on
+        IPC delivery order.
     """
     event_type: str
     text: str
     source: str
     mode: str
     metadata: dict = field(default_factory=dict)
+    timestamp: float = field(default_factory=time.time)
 
     def __repr__(self) -> str:
         return (f"SpeechEvent({self.event_type!r} | {self.source!r} | "
                 f"text={self.text!r})")
+
+    def to_ipc(self) -> dict:
+        """
+        Build the exact JSON-serialisable object the IPC layer should put on
+        the message queue — no further reshaping needed by the caller (see
+        central_module.ipc.send / speech_runner.emit).
+
+        Fields
+        ------
+        type        classification — an EVENT_TYPE value (partial / command /
+                    dictation / device / error)
+        text        recognised or transcribed text
+        source      which engine produced it (vosk / whisper / audio / ...)
+        model       the specific model behind that engine (e.g.
+                    "vosk-model-small-en-in-0.4" or "faster-whisper-small"),
+                    when the event has one
+        timestamp   epoch seconds, rounded to ms
+        confidence  confidence of the text actually returned — VOSK's mean
+                    per-word confidence for a command, or Whisper's own
+                    avg_logprob-derived confidence for a dictation (falls
+                    back to VOSK's if Whisper couldn't produce one) — never
+                    a stale value from the other engine
+        metadata    everything else: routing reason, timings, words,
+                    per-engine model/confidence breakdown, etc.
+        """
+        obj: dict = {
+            "type": self.event_type,
+            "text": self.text,
+            "source": self.source,
+            "timestamp": round(self.timestamp, 3),
+        }
+
+        # Whichever engine actually produced `text` wins for the top-level
+        # model/confidence — whisper_* when this event was escalated,
+        # otherwise vosk_*. Both are always kept in metadata regardless.
+        model = self.metadata.get("whisper_model") or self.metadata.get("vosk_model")
+        if model:
+            obj["model"] = model
+
+        confidence = self.metadata.get("whisper_confidence")
+        if confidence is None:
+            confidence = self.metadata.get("mean_confidence")
+        if confidence is not None:
+            obj["confidence"] = confidence
+
+        obj["metadata"] = self.metadata
+        return obj
 
 
 # ── Manager ────────────────────────────────────────────────────────────────────
@@ -186,6 +241,10 @@ class SpeechManager:
         # Per-request Whisper language override; None = config default.
         self._whisper_language: str | None = None
 
+        # Partial-message throttling (IPC minimisation) — see config.IPC.
+        self._last_partial_text: str | None = None
+        self._last_partial_emit_ts: float = 0.0
+
     # ── Public API ─────────────────────────────────────────────────────────────
 
     def start(self) -> None:
@@ -225,6 +284,8 @@ class SpeechManager:
         # ── Go ─────────────────────────────────────────────────────────────────
         self._running.set()
         self._vad.reset()
+        self._last_partial_text = None
+        self._last_partial_emit_ts = 0.0
         self._vad_thread = threading.Thread(target=self._vad_loop, name="VADThread", daemon=True)
         self._process_thread = threading.Thread(
             target=self._process_loop, name="SegmentThread", daemon=True
@@ -377,12 +438,27 @@ class SpeechManager:
     def _on_preview_result(self, result: VoskResult) -> None:
         if result.is_final or not result.text:
             return
+
+        # ── Minimise IPC traffic ────────────────────────────────────────────
+        # VOSK's preview recognizer produces many partials per utterance.
+        # Collapse them: skip text identical to the last partial sent, and
+        # never send faster than IPC["partial_min_interval_s"] — the newest
+        # text always wins once the interval has passed, so nothing usable
+        # for a live-captions UI is lost, only the redundant repeats.
+        if IPC["partial_dedupe"] and result.text == self._last_partial_text:
+            return
+        now = time.time()
+        if now - self._last_partial_emit_ts < IPC["partial_min_interval_s"]:
+            return
+        self._last_partial_text = result.text
+        self._last_partial_emit_ts = now
+
         self._emit(SpeechEvent(
             event_type=EVENT_TYPE["partial"],
             text=result.text,
             source="vosk",
             mode=EVENT_TYPE["partial"],
-            metadata={"preview": True},
+            metadata={"preview": True, "vosk_model": result.model},
         ))
 
     # ── VAD loop ───────────────────────────────────────────────────────────────
@@ -464,6 +540,7 @@ class SpeechManager:
             **({"speech_prob": round(segment.speech_prob, 2)}
                if segment.speech_prob else {}),
             "words": vosk_result.words,     # [{word, start, end, conf}, …]
+            "vosk_model": vosk_result.model,
             "mean_confidence": round(vosk_result.mean_confidence, 3),
             "min_confidence": round(vosk_result.min_confidence, 3),
             "routing_reason": decision.reason,
@@ -490,13 +567,17 @@ class SpeechManager:
         meta["whisper_s"] = round(time.perf_counter() - t2, 3)
 
         if result.success and result.text:
-            meta.update(language=result.language, segments=result.segments)
+            meta.update(language=result.language, segments=result.segments,
+                        whisper_model=result.model)
+            if result.confidence is not None:
+                meta["whisper_confidence"] = round(result.confidence, 3)
             self._emit(SpeechEvent(
                 event_type=EVENT_TYPE["dictation"], text=result.text,
                 source="whisper", mode=EVENT_TYPE["dictation"], metadata=meta,
             ))
         elif not result.success:
             meta["error"] = result.error
+            meta["whisper_model"] = result.model
             self._emit(SpeechEvent(
                 event_type=EVENT_TYPE["error"], text="", source="whisper",
                 mode=EVENT_TYPE["error"], metadata=meta,

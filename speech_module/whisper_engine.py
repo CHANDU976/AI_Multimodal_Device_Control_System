@@ -16,6 +16,7 @@ from __future__ import annotations
 import path_setup  # noqa: F401 — adds project root to sys.path
 
 import logging
+import math
 import multiprocessing as mp
 import os
 import time
@@ -46,11 +47,28 @@ class WhisperResult:
     language: str
     segments: list[dict]
     duration_s: float       # inference wall-time
+    model: str = ""          # e.g. "faster-whisper-small" — which model produced this
     error: str | None = None
 
     @property
     def success(self) -> bool:
         return self.error is None
+
+    @property
+    def confidence(self) -> float | None:
+        """
+        Pseudo-confidence in [0, 1], derived from segments' avg_logprob (mean
+        log-probability per decoded token). faster-whisper has no native 0..1
+        confidence score the way VOSK does, so this exponentiates the mean
+        log-prob into an approximate per-token probability — the same trick
+        whisper.cpp's confidence display uses. None when there are no
+        segments (empty or failed transcription), so a caller can't mistake
+        "nothing to measure" for an actual zero.
+        """
+        if not self.segments:
+            return None
+        avg_logprob = sum(s.get("avg_logprob", 0.0) for s in self.segments) / len(self.segments)
+        return max(0.0, min(1.0, math.exp(avg_logprob)))
 
     def __repr__(self) -> str:
         if self.error:
@@ -133,7 +151,8 @@ def _whisper_worker(
     except Exception as exc:
         result_q.put(WhisperResult(
             text="", language="", segments=[],
-            duration_s=0.0, error=f"Model load failed: {exc}"
+            duration_s=0.0, model=os.path.basename(model_path.rstrip("/\\")) or model_key,
+            error=f"Model load failed: {exc}"
         ))
         return
 
@@ -190,11 +209,13 @@ def _whisper_worker(
                 language=info.language,
                 segments=segments,
                 duration_s=time.perf_counter() - t0,
+                model=os.path.basename(model_path.rstrip("/\\")) or model_key,
             )
         except Exception as exc:
             result = WhisperResult(
                 text="", language="", segments=[],
                 duration_s=time.perf_counter() - t0,
+                model=os.path.basename(model_path.rstrip("/\\")) or model_key,
                 error=str(exc),
             )
 
