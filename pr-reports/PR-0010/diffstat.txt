@@ -1,0 +1,19 @@
+ .gitattributes                          |   2 -
+ .github/workflows/ci.yml                |   2 +-
+ .gitignore                              |  10 ++-
+ __pycache__/classifier.cpython-313.pyc  | Bin 7759 -> 0 bytes
+ central_module/runners/speech_runner.py |  26 ++----
+ docs/ci-cd.md                           |   8 +-
+ speech_module/config.py                 | 321 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-----------
+ speech_module/router.py                 |  76 +++++++++++++----
+ speech_module/speech_manager.py         |  48 ++++++++---
+ speech_module/vosk_engine.py            |  64 ++++++++++++---
+ speech_module/whisper_engine.py         |   6 +-
+ tests/central/test_runners_and_cli.py   |   8 +-
+ tests/helpers/fakes.py                  |   7 +-
+ tests/speech/test_routing.py            |  68 +++++++++++++---
+ tests/speech/test_speech_config.py      | 134 +++++++++++++++++++++++++++---
+ tests/speech/test_speech_manager.py     | 159 ++++++++++++++++++++++++++++++++++++
+ tests/speech/test_vosk_engine.py        |  30 ++++++-
+ tests/speech/test_whisper_engine.py     |   8 ++
+ 18 files changed, 833 insertions(+), 144 deletions(-)

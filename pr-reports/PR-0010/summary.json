@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "meta": {
+    "number": 10,
+    "title": "Vv2",
+    "author": "CHANDU976",
+    "url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/pull/10",
+    "base_ref": "main",
+    "head_ref": "vv2",
+    "event": "push",
+    "run_url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/actions/runs/36332153678",
+    "repository": "CHANDU976/AI_Multimodal_Device_Control_System",
+    "generated_at": "2026-09-27T16:10:48Z"
+  },
+  "range": {
+    "base": "57a369e903d33a155a91ba36dddf4f18ff53f530",
+    "head": "9d659eb02379ae52d610208bc82d22c82d41fe32",
+    "behind": 0
+  },
+  "verdict": "attention",
+  "verdict_reasons": [
+    "Calibrated constants changed",
+    "Virtualenv / bytecode files in the diff"
+  ],
+  "totals": {
+    "files": 30171,
+    "additions": 833,
+    "deletions": 5839095,
+    "commits": 3
+  },
+  "areas": {
+    "central": {
+      "files": 1,
+      "additions": 6,
+      "deletions": 20
+    },
+    "speech": {
+      "files": 5,
+      "additions": 427,
+      "deletions": 88
+    },
+    "tests": {
+      "files": 7,
+      "additions": 387,
+      "deletions": 27
+    },
+    "ci": {
+      "files": 3,
+      "additions": 9,
+      "deletions": 5
+    },
+    "docs": {
+      "files": 1,
+      "additions": 4,
+      "deletions": 4
+    },
+    "environment": {
+      "files": 30129,
+      "additions": 0,
+      "deletions": 5838951
+    },
+    "generated": {
+      "files": 25,
+      "additions": 0,
+      "deletions": 0
+    }
+  },
+  "tests": {
+    "tests": 4820,
+    "passed": 4720,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 88,
+    "xfailed": 12,
+    "suites": 4
+  },
+  "changed_line_coverage": 98.0,
+  "attention": [
+    "Calibrated constants changed",
+    "Virtualenv / bytecode files in the diff",
+    "Needs a hands-on check CI cannot do",
+    "CI/tooling changed"
+  ]
+}
