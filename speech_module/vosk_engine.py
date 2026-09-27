@@ -52,6 +52,12 @@ class VoskResult:
     # Which VOSK model produced this result (e.g. "vosk-model-small-en-in-0.4").
     model: str = ""
 
+    # True when the decode was constrained to config.command_grammar(), so the
+    # text can only be phrases from it — the router's cue to apply its
+    # phrase rules. False for free decodes, including a model that rejected
+    # the grammar.
+    constrained: bool = False
+
     @property
     def word_count(self) -> int:
         return len(self.text.split())
@@ -65,7 +71,8 @@ class VoskResult:
                 f"{self.duration_s:.1f}s)")
 
 
-def parse_final(raw: dict, duration_s: float = 0.0, model: str = "") -> VoskResult:
+def parse_final(raw: dict, duration_s: float = 0.0, model: str = "",
+                constrained: bool = False) -> VoskResult:
     """
     Build a VoskResult from VOSK's final-result JSON.
 
@@ -78,7 +85,7 @@ def parse_final(raw: dict, duration_s: float = 0.0, model: str = "") -> VoskResu
     excluded from both the text and the confidence aggregates: a breath or a
     keyboard click mapping to one low-confidence [unk] should not put a
     literal "[unk]" in a command or drag min_confidence below threshold —
-    whether the OOV share matters is the router's call, via unk_ratio.
+    whether the OOV share matters is the router's call.
     """
     words = raw.get("result") or []
     real_words = [w for w in words if w.get("word") != "[unk]"]
@@ -100,6 +107,7 @@ def parse_final(raw: dict, duration_s: float = 0.0, model: str = "") -> VoskResu
         unk_count=unk_count,
         unk_ratio=unk_count / len(words) if words else 0.0,
         model=model,
+        constrained=constrained,
     )
 
 
@@ -246,7 +254,7 @@ class VoskEngine:
             try:
                 rec = vosk.KaldiRecognizer(
                     self._model, self.sample_rate,
-                    json.dumps(grammar, ensure_ascii=False),
+                    json.dumps(self._sayable(grammar), ensure_ascii=False),
                 )
                 self._grammar_ok = True
             except Exception as exc:
@@ -262,6 +270,24 @@ class VoskEngine:
         rec.SetMaxAlternatives(VOSK_CFG["max_alternatives"])
         rec.SetWords(True)
         return rec
+
+    def _sayable(self, phrases: list[str]) -> list[str]:
+        """
+        Drop grammar phrases that use a word this model's lexicon lacks. Left
+        in, Kaldi deletes just the missing word — "open notepad" becomes
+        "open", a real command the utterance never was. config.SPOKEN_FORMS
+        supplies spellings the model can say instead.
+        """
+        find_word = getattr(self._model, "vosk_model_find_word", None)
+        if find_word is None:                  # vosk without the lexicon API
+            return phrases
+        words = {w for p in phrases for w in p.split()} - {"[unk]"}
+        missing = {w for w in words if find_word(w) < 0}
+        if not missing:
+            return phrases
+        logger.info("Grammar: %s lacks %s — phrases using them dropped.",
+                    os.path.basename(self.model_path), " ".join(sorted(missing)))
+        return [p for p in phrases if not missing.intersection(p.split())]
 
     def recognize_segment(
         self,
@@ -303,7 +329,9 @@ class VoskEngine:
                 self._seg_rec.Reset()
             self._seg_rec.AcceptWaveform(data)
             raw = json.loads(self._seg_rec.FinalResult())
-        result = parse_final(raw, duration_s=duration_s, model=os.path.basename(self.model_path))
+            constrained = bool(grammar) and self._grammar_ok is True
+        result = parse_final(raw, duration_s=duration_s, model=os.path.basename(self.model_path),
+                             constrained=constrained)
         logger.debug("Segment recognised: %r", result)
         return result
 

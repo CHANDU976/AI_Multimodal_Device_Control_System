@@ -106,7 +106,8 @@ class FakeVosk:
     `final` is the dict FinalResult()/Result() return; `partial` the dict
     PartialResult() returns; `accept` decides AcceptWaveform()'s verdict.
     `reject_grammar` makes grammar-constrained construction raise, the way a
-    model without a dynamic graph does.
+    model without a dynamic graph does. `missing_words` are the words the
+    model's lexicon lacks (vosk_model_find_word() → -1).
     """
 
     def __init__(self) -> None:
@@ -114,6 +115,7 @@ class FakeVosk:
         self.partial: dict = {"partial": ""}
         self.accept = False
         self.reject_grammar = False
+        self.missing_words: set[str] = set()
         self.recognizers: list = []
         self.models: list[str] = []
         self.log_level = None
@@ -123,6 +125,9 @@ class FakeVosk:
             def __init__(self, path):
                 fake.models.append(path)
                 self.path = path
+
+            def vosk_model_find_word(self, word):
+                return -1 if word in fake.missing_words else 1
 
         class KaldiRecognizer:
             def __init__(self, model, rate, grammar=None):

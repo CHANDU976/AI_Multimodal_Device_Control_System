@@ -69,6 +69,25 @@ def test_model_without_dynamic_graph_falls_back_to_free_decoding(fake_vosk, capl
     assert all(r.grammar is None for r in fake_vosk.recognizers)
 
 
+def test_grammar_phrases_the_model_cannot_say_are_dropped_whole(fake_vosk):
+    # Kaldi would delete just "notepad", leaving a phrase that decodes "open".
+    fake_vosk.missing_words = {"notepad"}
+    engine = make_engine()
+    engine.recognize_segment(b"\x00\x00", grammar=["open notepad", "open note pad",
+                                                   "open chrome", "[unk]"])
+    (rec,) = [r for r in fake_vosk.recognizers if r.grammar is not None]
+    assert rec.grammar == ["open note pad", "open chrome", "[unk]"]
+
+
+def test_results_record_whether_the_grammar_constrained_them(fake_vosk):
+    engine = make_engine()
+    assert engine.recognize_segment(b"\x00\x00", grammar=["open", "[unk]"]).constrained
+    assert not engine.recognize_segment(b"\x00\x00", grammar=None).constrained
+    fake_vosk.reject_grammar = True                     # no dynamic graph
+    rejected = make_engine().recognize_segment(b"\x00\x00", grammar=["open", "[unk]"])
+    assert not rejected.constrained                     # fell back to free decoding
+
+
 def test_switch_model_hot_swaps_and_reprobes(fake_vosk):
     engine = make_engine()
     engine.load_model()

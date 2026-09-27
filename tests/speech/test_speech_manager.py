@@ -147,6 +147,31 @@ def test_escalation_without_whisper_is_dropped(manager):
     assert manager.events == []
 
 
+def grammar_result(text):
+    words = [{"word": w, "conf": 0.97, "start": 0.0, "end": 0.2} for w in text.split()]
+    return VoskResult(event="command", text=text, is_final=True, words=words,
+                      mean_confidence=0.97, min_confidence=0.97, duration_s=1.0,
+                      constrained=True)
+
+
+def test_grammar_command_is_sent_in_canonical_form(manager):
+    manager._vosk_engine = FakeVoskEngine(grammar_result("please open note pad"))
+    manager._whisper_engine = FakeWhisperEngine(None)
+    manager._handle_segment(segment(1.0, speech_prob=0.91))
+    (event,) = manager.events
+    assert (event.event_type, event.source, event.text) == ("command", "vosk", "open notepad")
+    assert event.metadata["vosk_text"] == "please open note pad"   # what was decoded
+
+
+def test_confident_everyday_speech_goes_to_whisper_not_to_a_command(manager):
+    manager._vosk_engine = FakeVoskEngine(grammar_result("how are you"))
+    manager._whisper_engine = FakeWhisperEngine(WhisperResult("How are you?", "en", [], 0.4))
+    manager._handle_segment(segment(1.0, speech_prob=0.91))
+    (event,) = manager.events
+    assert (event.event_type, event.text) == ("dictation", "How are you?")
+    assert event.metadata["routing_reason"] == "everyday speech"
+
+
 def test_processing_errors_are_reported_not_fatal(manager):
     class Broken:
         def recognize_segment(self, *a, **k):
