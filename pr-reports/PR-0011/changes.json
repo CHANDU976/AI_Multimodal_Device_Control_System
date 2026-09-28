@@ -1,0 +1,398 @@
+{
+  "areas": [
+    {
+      "area": "gesture",
+      "title": "Gesture module",
+      "files": 14,
+      "additions": 4598,
+      "deletions": 136,
+      "binary": 0,
+      "components": {
+        "model": 3,
+        "adaptive_timing": 1,
+        "studio-gui": 1,
+        "calibration_ui": 1,
+        "cameras": 1,
+        "config_lifecycle_probe": 1,
+        "cursor_stability_probe": 1,
+        "config": 1,
+        "fsm": 1,
+        "engine": 1,
+        "test": 1,
+        "transition_probe": 1
+      }
+    },
+    {
+      "area": "tests",
+      "title": "Tests",
+      "files": 10,
+      "additions": 4507,
+      "deletions": 7,
+      "binary": 0,
+      "components": {
+        "gesture": 10
+      }
+    },
+    {
+      "area": "dependencies",
+      "title": "Dependency pins",
+      "files": 2,
+      "additions": 78,
+      "deletions": 0,
+      "binary": 0,
+      "components": {
+        "Mousegesture/requirements.txt": 1,
+        "requirements.txt": 1
+      }
+    },
+    {
+      "area": "docs",
+      "title": "Documentation",
+      "files": 1,
+      "additions": 52,
+      "deletions": 21,
+      "binary": 0,
+      "components": {
+        "gesture": 1
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "Mousegesture/README.md",
+      "status": "M",
+      "additions": 52,
+      "deletions": 21,
+      "binary": false,
+      "old_path": null,
+      "area": "docs",
+      "component": "gesture"
+    },
+    {
+      "path": "Mousegesture/adaptive_timing.py",
+      "status": "A",
+      "additions": 596,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "adaptive_timing"
+    },
+    {
+      "path": "Mousegesture/app.py",
+      "status": "M",
+      "additions": 849,
+      "deletions": 64,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "studio-gui"
+    },
+    {
+      "path": "Mousegesture/calibration_ui.py",
+      "status": "A",
+      "additions": 509,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "calibration_ui"
+    },
+    {
+      "path": "Mousegesture/cameras.py",
+      "status": "A",
+      "additions": 141,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "cameras"
+    },
+    {
+      "path": "Mousegesture/config_lifecycle_probe.py",
+      "status": "A",
+      "additions": 297,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "config_lifecycle_probe"
+    },
+    {
+      "path": "Mousegesture/cursor_stability_probe.py",
+      "status": "A",
+      "additions": 321,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "cursor_stability_probe"
+    },
+    {
+      "path": "Mousegesture/gesture_config.json",
+      "status": "M",
+      "additions": 165,
+      "deletions": 17,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "config"
+    },
+    {
+      "path": "Mousegesture/gesture_fsm.py",
+      "status": "M",
+      "additions": 431,
+      "deletions": 10,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "fsm"
+    },
+    {
+      "path": "Mousegesture/hand_cursor_2.py",
+      "status": "M",
+      "additions": 1042,
+      "deletions": 36,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "engine"
+    },
+    {
+      "path": "Mousegesture/model/convert.py",
+      "status": "M",
+      "additions": 5,
+      "deletions": 1,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "model"
+    },
+    {
+      "path": "Mousegesture/model/onxxmodel.py",
+      "status": "M",
+      "additions": 5,
+      "deletions": 1,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "model"
+    },
+    {
+      "path": "Mousegesture/model/ptmodel.py",
+      "status": "M",
+      "additions": 10,
+      "deletions": 2,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "model"
+    },
+    {
+      "path": "Mousegesture/requirements.txt",
+      "status": "A",
+      "additions": 73,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "dependencies",
+      "component": "Mousegesture/requirements.txt"
+    },
+    {
+      "path": "Mousegesture/test.py",
+      "status": "M",
+      "additions": 15,
+      "deletions": 5,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "test"
+    },
+    {
+      "path": "Mousegesture/transition_probe.py",
+      "status": "A",
+      "additions": 212,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "transition_probe"
+    },
+    {
+      "path": "requirements.txt",
+      "status": "M",
+      "additions": 5,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "dependencies",
+      "component": "requirements.txt"
+    },
+    {
+      "path": "tests/gesture/test_action_dispatch.py",
+      "status": "A",
+      "additions": 688,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/gesture/test_config_lifecycle.py",
+      "status": "A",
+      "additions": 967,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/gesture/test_cursor_clutch.py",
+      "status": "A",
+      "additions": 219,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/gesture/test_cursor_control.py",
+      "status": "A",
+      "additions": 402,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/gesture/test_cursor_stability.py",
+      "status": "A",
+      "additions": 274,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/gesture/test_gesture_fsm_transitions.py",
+      "status": "A",
+      "additions": 862,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/gesture/test_gesture_output.py",
+      "status": "M",
+      "additions": 32,
+      "deletions": 7,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/gesture/test_preview_toggle.py",
+      "status": "A",
+      "additions": 230,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/gesture/test_static_hold.py",
+      "status": "A",
+      "additions": 568,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/gesture/test_swipe_actions.py",
+      "status": "A",
+      "additions": 265,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "gesture"
+    }
+  ],
+  "collapsed": {},
+  "commits": [
+    {
+      "sha": "306170d3f5bb35abaf79f2be099853667f550fb0",
+      "short": "306170d",
+      "author": "CHANDAN B L",
+      "date": "2026-09-28",
+      "subject": "Fix the flaky rule-id uniqueness test"
+    },
+    {
+      "sha": "e3b7012537e1d15f4eb046fbd4e2ea3c98e9d568",
+      "short": "e3b7012",
+      "author": "CHANDAN B L",
+      "date": "2026-09-28",
+      "subject": "Pin the gesture requirements to one set with the speech stack"
+    },
+    {
+      "sha": "d6158b0318ae742744a4ceb49080c09705234e7b",
+      "short": "d6158b0",
+      "author": "CHANDAN B L",
+      "date": "2026-09-28",
+      "subject": "Update gesture output tests for accelerating scroll and double-click"
+    },
+    {
+      "sha": "e11ae3615e7ecbd3622bf4ea43acbf01abd9a7a9",
+      "short": "e11ae36",
+      "author": "CHANDAN B L",
+      "date": "2026-09-28",
+      "subject": "Classify the swipe actions as keyboard macros only"
+    },
+    {
+      "sha": "6d96686d6d6fb529bf4fec7f0c233bbdc190b1dd",
+      "short": "6d96686",
+      "author": "CHANDAN B L",
+      "date": "2026-09-28",
+      "subject": "Move the Mousegesture tests into tests/gesture so CI runs them"
+    },
+    {
+      "sha": "d42e40116e972548cbbdea71bb947bb8d747a45b",
+      "short": "d42e401",
+      "author": "CHANDAN B L",
+      "date": "2026-09-28",
+      "subject": "Restore the model files deleted again in \"version 2\""
+    },
+    {
+      "sha": "a8213e6752f335c4d10009cdcfc5f4e7a5f3f5e0",
+      "short": "a8213e6",
+      "author": "BangerAtifAhmed",
+      "date": "2026-09-28",
+      "subject": "version 2"
+    },
+    {
+      "sha": "94b64527eb10c6ba43ed2c977286ea4f0d652764",
+      "short": "94b6452",
+      "author": "BangerAtifAhmed",
+      "date": "2026-09-24",
+      "subject": "Restore model and .venv files accidentally deleted in version 1"
+    },
+    {
+      "sha": "c2b5608faa4e77b5217824ea8562d65a6c873091",
+      "short": "c2b5608",
+      "author": "BangerAtifAhmed",
+      "date": "2026-09-24",
+      "subject": "version 1"
+    }
+  ]
+}

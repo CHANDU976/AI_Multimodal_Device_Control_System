@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "meta": {
+    "number": 11,
+    "title": "Gesture dev",
+    "author": "BangerAtifAhmed",
+    "url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/pull/11",
+    "base_ref": "main",
+    "head_ref": "gesture_dev",
+    "event": "push",
+    "run_url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/actions/runs/36424617885",
+    "repository": "CHANDU976/AI_Multimodal_Device_Control_System",
+    "generated_at": "2026-09-28T12:54:30Z"
+  },
+  "range": {
+    "base": "fa83515f05b0b027944fc9d9606197dd779907b4",
+    "head": "8c2774ac633bfa622568271f8df88bf0939bacd1",
+    "behind": 0
+  },
+  "verdict": "attention",
+  "verdict_reasons": [
+    "Dependency pins changed",
+    "Calibrated constants changed",
+    "changed-line coverage 39.6% < 60%",
+    "6 new advisory lint finding(s)"
+  ],
+  "totals": {
+    "files": 27,
+    "additions": 9235,
+    "deletions": 164,
+    "commits": 9
+  },
+  "areas": {
+    "gesture": {
+      "files": 14,
+      "additions": 4598,
+      "deletions": 136
+    },
+    "tests": {
+      "files": 10,
+      "additions": 4507,
+      "deletions": 7
+    },
+    "dependencies": {
+      "files": 2,
+      "additions": 78,
+      "deletions": 0
+    },
+    "docs": {
+      "files": 1,
+      "additions": 52,
+      "deletions": 21
+    }
+  },
+  "tests": {
+    "tests": 5675,
+    "passed": 5575,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 88,
+    "xfailed": 12,
+    "suites": 4
+  },
+  "changed_line_coverage": 39.6,
+  "attention": [
+    "Dependency pins changed",
+    "Calibrated constants changed",
+    "Needs a hands-on check CI cannot do",
+    "Large change set (9399 lines)"
+  ]
+}
