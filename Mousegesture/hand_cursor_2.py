@@ -91,6 +91,7 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 import cv2
 import mediapipe as mp
@@ -114,7 +115,7 @@ except Exception:                       # pragma: no cover - optional branch
     DRAG_START = "DRAG_START"
     DRAG_STOP = "DRAG_STOP"
     ActionExecutor = None
-    CONFIG_PATH = "gesture_config.json"
+    CONFIG_PATH = str(Path(__file__).resolve().parent / "gesture_config.json")
     GestureFSM = None
     format_transition_report = None
     MajorityStabilizer = None
@@ -401,6 +402,50 @@ SEMANTIC_FREEZE_MAX_MS = 1200
 # gesture's return stroke travels back TOWARDS the pin and never does.
 ACTION_SETTLE_MS = 800
 
+# ── Cursor clutch (gesture-gated cursor control) ───────────────────────
+# With cursor control gated on a pose, the holds above are not enough.
+# The gate only decides whether cursor.move() is CALLED; the stabiliser
+# and the 1 Euro filter go on following the hand while it is shut.  So
+# the first move after it re-opens put the pointer on the hand's current
+# ABSOLUTE position -- wherever the fold, the click and the unfold had
+# left the knuckle.  Measured on a stop -> one -> fist -> stop click
+# cycle: a 21.6 px jump in one frame as the palm re-opened, and the
+# pointer 43.6 px from where it had been aimed.
+#
+# The clutch works like lifting a mouse.  When the gate re-opens with the
+# hand close to where it was when the gate shut, the cursor carries on
+# from where it stopped and the hand's displacement becomes an offset.
+# "Close" is MOTION_RELEASE_PX, the same line the holds above draw
+# between a gesture articulating and a hand being moved on purpose;
+# beyond it the cursor snaps to the hand as it always did.
+#
+# Only the gate shutting and re-opening engages it -- or the hand dropping
+# out of view and coming back near where it went, which is what MediaPipe
+# does for a few frames while a fist forms.  With cursor control set to
+# "always" and the hand in view, the gate never shuts and the cursor
+# follows the filter exactly as before.
+
+# After a re-open the pointer stays put this long while the hand finishes
+# opening: the semantic label reports the cursor pose before the fingers
+# have stopped moving.  Short enough not to read as lag.
+CLUTCH_SETTLE_MS = 150
+
+# The offset bleeds away as the hand moves -- this many pixels of offset
+# per pixel of cursor travel -- so the mapping drifts back to absolute
+# during ordinary pointing and every part of the screen stays reachable.
+# It never changes while the hand is still, which is what keeps the
+# cursor in place across the transition itself.
+CLUTCH_CATCHUP = 0.25
+
+# The ENTRY side.  The gate shuts only when the slow semantic branch
+# stops reporting the cursor pose, by which time the fingers have been
+# folding for a while and the cursor has followed the knuckle -- 20.3 px
+# at the click, measured.  So when the gate shuts, the cursor returns to
+# where it was last RESTING, provided the hand was resting that recently
+# and the point is within MOTION_RELEASE_PX.  Anything older is pointing,
+# not articulation, and is left alone.
+CLUTCH_REST_FRESH_MS = 600
+
 _MOTION_REST_SQ = MOTION_REST_PX * MOTION_REST_PX
 _MOTION_TRIGGER_SQ = MOTION_TRIGGER_PX * MOTION_TRIGGER_PX
 _MOTION_RELEASE_SQ = MOTION_RELEASE_PX * MOTION_RELEASE_PX
@@ -558,8 +603,16 @@ MIN_TRACKING_CONFIDENCE = 0.5
 # NEWEST frame: when the worker is busy the main loop overwrites the pending
 # item and moves on, so nothing ever waits.
 YOLO_ENABLED = True
-YOLO_MODEL_PATH = os.path.join("model", "YOLOv10n_gestures.pt")
+YOLO_MODEL_PATH = str(Path(__file__).resolve().parent
+                      / "model" / "YOLOv10n_gestures.pt")
 YOLO_INPUT_SIZE = 640
+
+# Ultralytics creates an empty runs/detect/predictN folder in the CURRENT
+# directory on the first predict(), even with save=False, so a launch from
+# any other folder left one behind there.  Pinned to this module's runs/
+# and reused rather than numbered.  Output location only: the predictions
+# themselves are unchanged.
+YOLO_RUNS_DIR = str(Path(__file__).resolve().parent / "runs" / "detect")
 
 # "auto" lets ultralytics choose, which picks CUDA when torch can see a GPU.
 # Worth leaving alone: on this machine CUDA is 5.3× faster than CPU, close
@@ -572,7 +625,7 @@ YOLO_SCORE_THRESHOLD = 0.35
 # worker thread, never the cursor path.  Off by default — it is a JPEG
 # encode per inference.
 YOLO_DEBUG_CROP = False
-YOLO_DEBUG_CROP_PATH = "debug_crop.jpg"
+YOLO_DEBUG_CROP_PATH = str(Path(__file__).resolve().parent / "debug_crop.jpg")
 
 # Print every change in the YOLO label, so the "[yolo] a -> b" lines sit
 # alongside the "[gesture] a -> b" lines from the geometry classifier.  The
@@ -3529,7 +3582,9 @@ class YoloWorker(threading.Thread):
         # The frame goes in as raw BGR.
         started = time.perf_counter()
         results = self._net.predict(crop, imgsz=self._input_size,
-                                    verbose=False, **self._predict_kwargs)
+                                    verbose=False, project=YOLO_RUNS_DIR,
+                                    name="predict", exist_ok=True,
+                                    **self._predict_kwargs)
         latency_ms = (time.perf_counter() - started) * 1000.0
 
         boxes = results[0].boxes
@@ -3936,6 +3991,121 @@ class CursorStabiliser:
             self.motion_frames = 0
 
         return target_x, target_y
+
+
+class CursorClutch:
+    """Keeps the cursor still across the cursor-control gate.
+
+    Sits after the 1 Euro filter and before cursor.move(), and is a pure
+    function of the filtered point, the live (unheld) point and the gate,
+    so it replays frame by frame like CursorStabiliser.  See the notes by
+    CLUTCH_SETTLE_MS for the defect and the numbers.
+
+    update() returns where to put the cursor this frame, or None to leave
+    it alone.  It returns a point on a shut gate exactly once: the frame
+    the gate shuts, when the cursor goes back to its last resting point.
+    """
+
+    __slots__ = ("last", "hand_at_close", "closed", "offset_x", "offset_y",
+                 "prev_smooth", "settle_until", "settle_hand", "history",
+                 "rest", "rest_t")
+
+    def __init__(self) -> None:
+        self.history = collections.deque(maxlen=MOTION_BASELINE_FRAMES)
+        self.last = None
+        self.hand_at_close = None
+        self.closed = False
+        self.offset_x = self.offset_y = 0.0
+        self.prev_smooth = None
+        self.settle_until = 0.0
+        self.settle_hand = None
+        self.rest = None
+        self.rest_t = None
+
+    def interrupt(self) -> None:
+        """The hand was lost or the filters were reset: count it as the
+        gate shutting, without moving the cursor.  The re-open test then
+        decides whether the cursor carries on or snaps to the hand."""
+        self.closed = True
+        self.history.clear()
+        self.rest = None
+
+    def reopens(self, live_x: float, live_y: float) -> bool:
+        """True when an open gate this frame should engage the clutch."""
+        if not self.closed or self.last is None or self.hand_at_close is None:
+            return False
+        dx = live_x - self.hand_at_close[0]
+        dy = live_y - self.hand_at_close[1]
+        return dx * dx + dy * dy <= _MOTION_RELEASE_SQ
+
+    def update(self, smooth_x: float, smooth_y: float, live_x: float,
+               live_y: float, gate_open: bool, now: float, bounds):
+        if not gate_open:
+            if self.closed:
+                return None
+            self.closed = True
+            snap = None
+            if (self.rest is not None and self.last is not None
+                    and now - self.rest_t <= CLUTCH_REST_FRESH_MS / 1000.0):
+                dx = self.last[0] - self.rest[0]
+                dy = self.last[1] - self.rest[1]
+                if 0.0 < dx * dx + dy * dy <= _MOTION_RELEASE_SQ:
+                    snap = self.last = self.rest
+            self.history.clear()
+            self.rest = None
+            return snap
+
+        if self.closed:
+            if self.reopens(live_x, live_y):
+                self.settle_until = now + CLUTCH_SETTLE_MS / 1000.0
+                self.settle_hand = (live_x, live_y)
+            else:
+                # Moved on purpose, or first sight of the hand: absolute.
+                self.offset_x = self.offset_y = 0.0
+                self.settle_until = 0.0
+            self.closed = False
+            self.prev_smooth = None
+
+        if self.settle_until:
+            sdx = live_x - self.settle_hand[0]
+            sdy = live_y - self.settle_hand[1]
+            if (now < self.settle_until
+                    and sdx * sdx + sdy * sdy <= _MOTION_RELEASE_SQ):
+                # Re-based every frame, so the cursor holds exactly.
+                self.offset_x = self.last[0] - smooth_x
+                self.offset_y = self.last[1] - smooth_y
+            else:
+                self.settle_until = 0.0
+        elif self.prev_smooth is not None and (self.offset_x
+                                               or self.offset_y):
+            step = math.hypot(smooth_x - self.prev_smooth[0],
+                              smooth_y - self.prev_smooth[1])
+            size = math.hypot(self.offset_x, self.offset_y)
+            keep = max(0.0, size - CLUTCH_CATCHUP * step) / size
+            self.offset_x *= keep
+            self.offset_y *= keep
+
+        left, top, right, bottom = bounds
+        x = clamp(smooth_x + self.offset_x, left, right)
+        y = clamp(smooth_y + self.offset_y, top, bottom)
+        # Pressing against an edge spends the offset, as a mouse would.
+        self.offset_x = x - smooth_x
+        self.offset_y = y - smooth_y
+
+        self.prev_smooth = (smooth_x, smooth_y)
+        self.hand_at_close = (live_x, live_y)
+        self.last = (x, y)
+
+        # Resting point, judged on the cursor itself over the same window
+        # the stabiliser uses.
+        self.history.append((x, y))
+        base = self.history[0]
+        if (len(self.history) == MOTION_BASELINE_FRAMES
+                and (x - base[0]) ** 2 + (y - base[1]) ** 2
+                < _MOTION_REST_SQ):
+            self.rest = (x, y)
+            self.rest_t = now
+        return x, y
 
 
 class HandTrackerEngine:
@@ -4763,8 +4933,7 @@ class HandTrackerEngine:
     def _ensure_monitor(self) -> None:
         if self.monitor_process is not None or not self._enable_monitor:
             return
-        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                              "system_monitor.py")
+        script = str(Path(__file__).resolve().parent / "system_monitor.py")
         try:
             self.monitor_process = subprocess.Popen(
                 [sys.executable, script, str(os.getpid())])
@@ -4830,6 +4999,7 @@ class HandTrackerEngine:
         fingers_ext = (False, False, False, False)
         thumb_out = False
         stabiliser = CursorStabiliser()
+        clutch = CursorClutch()
         gesture_changes = 0
         stable_gesture = None
         primary_anchor = None
@@ -5055,6 +5225,7 @@ class HandTrackerEngine:
                         hand_present = True
                         gesture_state = None
                         stabiliser.reset()
+                        clutch.interrupt()
 
                     if gesture != gesture_state:
                         previous = gesture_state
@@ -5155,12 +5326,29 @@ class HandTrackerEngine:
                         gesture, hand_side, last_semantic,
                         dragging=actions.dragging)
 
+                    # Gate re-opening near where it shut: the cursor
+                    # carries on from where it stopped (CursorClutch).
+                    # Holds armed while it was shut are dropped and the
+                    # filter restarts on the live point, so none of them
+                    # can release into a jump once the clutch lets go.
+                    if cursor_enabled and clutch.reopens(_pre_x, _pre_y):
+                        stabiliser.reset()
+                        oef_x.reset()
+                        oef_y.reset()
+                        smooth_x = oef_x(_pre_x, timestamp=now_ts)
+                        smooth_y = oef_y(_pre_y, timestamp=now_ts)
+                    _out = clutch.update(
+                        smooth_x, smooth_y, _pre_x, _pre_y, cursor_enabled,
+                        now_ts, (screen.left, screen.top,
+                                 screen.left + screen.width,
+                                 screen.top + screen.height))
+
                     # Cursor output can fail too (a revoked session, no
                     # libXtst).  Losing a frame of movement is survivable;
                     # losing the thread is not.
                     try:
-                        if cursor_enabled:
-                            self.cursor.move(int(smooth_x), int(smooth_y))
+                        if _out is not None:
+                            self.cursor.move(int(_out[0]), int(_out[1]))
                     except Exception as exc:
                         self._log_once(
                             "cursor",

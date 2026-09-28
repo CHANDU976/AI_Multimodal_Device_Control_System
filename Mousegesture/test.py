@@ -89,6 +89,7 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 import cv2
 import mediapipe as mp
@@ -404,8 +405,16 @@ MIN_TRACKING_CONFIDENCE = 0.5
 # NEWEST frame: when the worker is busy the main loop overwrites the pending
 # item and moves on, so nothing ever waits.
 YOLO_ENABLED = True
-YOLO_MODEL_PATH = os.path.join("model", "YOLOv10n_gestures.pt")
+YOLO_MODEL_PATH = str(Path(__file__).resolve().parent
+                      / "model" / "YOLOv10n_gestures.pt")
 YOLO_INPUT_SIZE = 640
+
+# Ultralytics creates an empty runs/detect/predictN folder in the CURRENT
+# directory on the first predict(), even with save=False, so a launch from
+# any other folder left one behind there.  Pinned to this module's runs/
+# and reused rather than numbered.  Output location only: the predictions
+# themselves are unchanged.
+YOLO_RUNS_DIR = str(Path(__file__).resolve().parent / "runs" / "detect")
 
 # "auto" lets ultralytics choose, which picks CUDA when torch can see a GPU.
 # Worth leaving alone: on this machine CUDA is 5.3× faster than CPU, close
@@ -418,7 +427,7 @@ YOLO_SCORE_THRESHOLD = 0.35
 # worker thread, never the cursor path.  Off by default — it is a JPEG
 # encode per inference.
 YOLO_DEBUG_CROP = False
-YOLO_DEBUG_CROP_PATH = "debug_crop.jpg"
+YOLO_DEBUG_CROP_PATH = str(Path(__file__).resolve().parent / "debug_crop.jpg")
 
 # Print every change in the YOLO label, so the "[yolo] a -> b" lines sit
 # alongside the "[gesture] a -> b" lines from the geometry classifier.  The
@@ -2659,7 +2668,9 @@ class YoloWorker(threading.Thread):
         # The frame goes in as raw BGR.
         started = time.perf_counter()
         results = self._net.predict(crop, imgsz=self._input_size,
-                                    verbose=False, **self._predict_kwargs)
+                                    verbose=False, project=YOLO_RUNS_DIR,
+                                    name="predict", exist_ok=True,
+                                    **self._predict_kwargs)
         latency_ms = (time.perf_counter() - started) * 1000.0
 
         boxes = results[0].boxes
@@ -2878,8 +2889,7 @@ else:
 # so launching from anywhere still finds the script.
 monitor_process = None
 if SYSTEM_MONITOR_ENABLED:
-    _monitor_script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                   "testmoniter.py")
+    _monitor_script = str(Path(__file__).resolve().parent / "testmoniter.py")
     try:
         monitor_process = subprocess.Popen(
             [sys.executable, _monitor_script, str(os.getpid())])

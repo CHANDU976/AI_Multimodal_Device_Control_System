@@ -1,5 +1,9 @@
+from pathlib import Path
+
 from ultralytics import YOLO
 import cv2
+
+MODEL_DIR = Path(__file__).resolve().parent
 
 # -----------------------------
 # Select Camera
@@ -20,7 +24,7 @@ if not cap.isOpened():
 # -----------------------------
 # Load Model
 # -----------------------------
-model = YOLO("model/YOLOv10n_gestures.pt")
+model = YOLO(str(MODEL_DIR / "YOLOv10n_gestures.pt"))
 
 print("\nModel loaded successfully.")
 print("Press ESC to exit.\n")
@@ -38,7 +42,11 @@ while True:
     results = model.predict(
         source=frame,
         conf=0.25,
-        verbose=False
+        verbose=False,
+        # Keep Ultralytics' output folder in the module, not the launch folder
+        project=str(MODEL_DIR.parent / "runs" / "detect"),
+        name="predict",
+        exist_ok=True
     )
 
     annotated = results[0].plot()

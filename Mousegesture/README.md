@@ -109,7 +109,6 @@ These are named explicitly because they are commonly assumed to be present:
 | Adaptive workspace | The active region is a fixed proportion of the frame |
 | Dynamic gestures (swipe, zoom) | Every classifier here is per-frame static pose |
 | Landmark centroid | The anchor is a single landmark, not an average |
-| Automated test suite | See [Testing](#testing) |
 
 ---
 
@@ -212,7 +211,7 @@ These are named explicitly because they are commonly assumed to be present:
 | **Concurrency** | `threading`, `queue` (depth-1 newest-wins), `subprocess`, lock-free atomic publication |
 | **Telemetry** | psutil, nvidia-ml-py (`pynvml`) |
 | **Numerics** | NumPy 2.x, preallocated frame buffers |
-| **Testing** | *No automated test suite in the repository* — see [Testing](#testing) |
+| **Testing** | `unittest` suite (283 tests in 9 files, also runs under pytest) plus 3 diagnostic probes — see [Testing](#testing) |
 | **Development tools** | Git, Git LFS (`*.pt`, `*.onnx`), pycodestyle, conda |
 
 ---
@@ -647,25 +646,59 @@ Mousegesture/
 
 ## Testing
 
-**There is no automated test suite in this repository.**
+The module has an automated suite of **283 tests in nine `test_*.py` files**,
+written with `unittest` and also runnable under pytest. The tests import the
+real modules, so the packages in `requirements.txt` (and tkinter) must be
+installed, but none of them needs a camera, a GPU or the YOLO model, and none
+writes `gesture_config.json`: each test builds its rules in memory or uses a
+throwaway temp file.
 
-| File | Lines | `assert` | `def test_` |
-|---|---:|---:|---:|
-| `test.py` | 3,701 | 0 | 0 |
-| `testmoniter.py` | 413 | 0 | 0 |
-| `app.py` | 2,854 | 0 | 0 |
-| `hand_cursor_2.py` | 4,635 | 0 | 0 |
-| `gesture_fsm.py` | 1,366 | 0 | 0 |
+| File | Tests | Covers |
+|---|---:|---|
+| `test_gesture_fsm.py` | 57 | The semantic-transition engine in `gesture_fsm.py` |
+| `test_action_dispatch.py` | 48 | What reaches the mouse backend: clicks, double-clicks, drags, swipes |
+| `test_config_lifecycle.py` | 44 | A mapping's path from the GUI to disk to the running engine |
+| `test_cursor_control.py` | 43 | The Cursor Control setting (gesture-gated cursor) |
+| `test_static_hold.py` | 32 | Static Hold mappings |
+| `test_cursor_stability.py` | 21 | Cursor stabilisation while a gesture articulates |
+| `test_swipe_actions.py` | 15 | `SWIPE_LEFT` / `SWIPE_RIGHT` |
+| `test_preview_toggle.py` | 13 | The Live Preview show/hide toggle |
+| `test_cursor_clutch.py` | 10 | Cursor position when the cursor-control pose is left and resumed |
 
-Assertion-based verification harnesses were written **during development** and
-run against the source by AST extraction — importing the module opens a camera
-and a window, so the harnesses lift out individual classes and execute them
-against fakes. They covered screen geometry and hot-plug, sensitivity clamping,
-hotkey handling, the One-Euro filter, camera scanning, buffer reuse, the
-threaded stream, the state machine, drag safety, macro chords, DPI awareness,
-two-hand handling, orientation truth tables and display enumeration. **Those
-harnesses are not part of this repository** and are not claimed as a
-deliverable.
+Run from inside the `Mousegesture/` folder:
+
+```bash
+python -m unittest discover -p "test_*.py"        # whole suite, standard library only
+python -m pytest -o python_files="test_*.py" .    # whole suite under pytest
+python test_cursor_clutch.py                      # any one file on its own
+```
+
+Keep the `test_*.py` patterns. unittest's default pattern also matches
+`test.py` and `testmoniter.py`, and importing `test.py` starts the old engine,
+camera included, because it has no `if __name__ == "__main__":` guard.
+pytest's default patterns would also import `gesture_test.py`, which is not a
+test file.
+
+**Real key presses.** No test moves or clicks the real mouse, but five swipe
+tests (three in `test_action_dispatch.py`, two in `test_swipe_actions.py`)
+press the real Left and Right arrow keys through pynput. Keep a window focused
+where arrow keys are harmless while the suite runs.
+
+### Diagnostic probes
+
+Read-only instruments that print measurements instead of passing or failing:
+
+- `python cursor_stability_probe.py [-v]` — how far the cursor drifts while a
+  gesture articulates. `test_cursor_stability.py` and `test_cursor_clutch.py`
+  import its replay harness.
+- `python transition_probe.py [-v]` — replays the semantic-transition misfire
+  against in-memory rule sets.
+- `python config_lifecycle_probe.py` — traces a new mapping from the GUI
+  builder to the runtime FSM, using a throwaway config file.
+
+`gesture_test.py` is not part of the suite either: it is the **Test Gesture**
+panel on the Live Camera tab, which watches the live pipeline while you
+perform one mapping's gesture 50 times.
 
 ### Runtime diagnostics that are in the repository
 
@@ -1035,7 +1068,7 @@ implemented.
 | Improvement | Rationale |
 |---|---|
 | **Request MJPG via FOURCC** | Uncompressed YUY2 at 1280×720×30 needs ~442 Mbit/s and will not fit USB 2.0, so cameras silently downgrade. One `CAP_PROP_FOURCC` call before the size set is the standard fix |
-| **Move verification harnesses into `tests/`** | The assertion suites exist but live outside the repository; wiring them to pytest would make coverage claimable |
+| **Move the test suite into `tests/`** | The nine `test_*.py` files and three probes sit beside the runtime modules. Moving them needs an import-path shim for the tests, and a check that nothing outside this folder refers to them by name or path |
 | **Package the engine** | Capture, tracking, mapping and output are already separable — they are simply not separated |
 | **Update `others/requirements.txt`** | It pins `mediapipe==0.8.11` and omits torch, ultralytics, screeninfo, psutil and nvidia-ml-py |
 | **Add `.gitignore`** | `__pycache__/*.pyc` is currently committed |

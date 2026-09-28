@@ -1,14 +1,18 @@
 # Run this in Colab or a separate environment where you can install ultralytics
 # pip install ultralytics tqdm
 
+from pathlib import Path
+
 from ultralytics import YOLO
 from tqdm.auto import tqdm
 import threading
 import time
 
+MODEL_DIR = Path(__file__).resolve().parent
+
 # Load your custom PyTorch model
 print("Loading model...")
-model = YOLO("YOLOv10x_gestures.pt")
+model = YOLO(str(MODEL_DIR / "YOLOv10x_gestures.pt"))
 print("✅ Model loaded")
 
 # Function to perform export

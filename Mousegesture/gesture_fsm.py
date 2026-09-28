@@ -59,6 +59,7 @@ from __future__ import annotations
 import json
 import os
 from collections import Counter, deque
+from pathlib import Path
 
 import adaptive_timing
 
@@ -214,8 +215,7 @@ def hands_can_coincide(a, b) -> bool:
     return True          # BOTH paired with a specific side
 
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           "gesture_config.json")
+CONFIG_PATH = str(Path(__file__).resolve().parent / "gesture_config.json")
 
 DEFAULT_SETTINGS = {
     # Sliding-window majority vote.  3/2 is 100 ms at 30 Hz and absorbs any

@@ -21,6 +21,7 @@ import threading
 import time
 import tkinter as tk
 import uuid
+from pathlib import Path
 from tkinter import font as tkfont
 from tkinter import messagebox, ttk
 
@@ -106,8 +107,7 @@ DEFAULT_CURSOR_CONTROL = {"mode": "always", "gesture": None, "hand": "any"}
 # rule is reopened, which reads as the setting refusing to save.
 HOLD_DURATIONS = (0, 1, 3, 5, 10)
 
-GESTURE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           "gestures")
+GESTURE_DIR = str(Path(__file__).resolve().parent / "gestures")
 
 # ─── No gesture vocabulary ──────────────────────────────────────────────────
 # There is deliberately no master list of poses here any more.
