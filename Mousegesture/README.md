@@ -825,12 +825,14 @@ source .venv/bin/activate       # Linux
 
 ### 3. Install dependencies
 
-`others/requirements.txt` is **out of date** — it pins `mediapipe==0.8.11` and
-lists neither `torch`, `ultralytics`, `screeninfo`, `psutil` nor
-`nvidia-ml-py`. Install the actual dependency set:
+`others/requirements.txt` pins the core — `mediapipe==0.10.21` (the tracking
+layer needs its `mp.solutions.hands` API, which Tasks-only builds lack),
+`opencv-contrib-python` and numpy < 2 — but lists neither `torch`,
+`ultralytics`, `screeninfo`, `psutil` nor `nvidia-ml-py`. Install the actual
+dependency set:
 
 ```bash
-pip install opencv-python mediapipe numpy pynput pillow
+pip install -r others/requirements.txt pillow
 pip install ultralytics
 pip install screeninfo psutil nvidia-ml-py
 ```
@@ -1037,7 +1039,7 @@ implemented.
 | **Request MJPG via FOURCC** | Uncompressed YUY2 at 1280×720×30 needs ~442 Mbit/s and will not fit USB 2.0, so cameras silently downgrade. One `CAP_PROP_FOURCC` call before the size set is the standard fix |
 | **Move verification harnesses into `tests/`** | The assertion suites exist but live outside the repository; wiring them to pytest would make coverage claimable |
 | **Package the engine** | Capture, tracking, mapping and output are already separable — they are simply not separated |
-| **Update `others/requirements.txt`** | It pins `mediapipe==0.8.11` and omits torch, ultralytics, screeninfo, psutil and nvidia-ml-py |
+| **Complete `others/requirements.txt`** | It pins the core (MediaPipe 0.10.21) but omits torch, ultralytics, screeninfo, psutil and nvidia-ml-py |
 | **Add `.gitignore`** | `__pycache__/*.pyc` is currently committed |
 | **Remove unused YOLOv10x weights** | 373 MB of LFS storage the application never loads |
 | **Calibration wizard** | The mapping already reads its bounds from four `MARGIN_*` constants in one place, so a capture step would only need to replace those numbers |

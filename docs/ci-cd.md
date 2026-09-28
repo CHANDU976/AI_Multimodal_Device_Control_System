@@ -258,7 +258,7 @@ the marker to be removed. Every report lists them.
 | hygiene `secret` | Revoke the credential first, then remove it from history. |
 | hygiene `large-file` | Track the file with Git LFS (add a rule to `.gitattributes`). |
 | Lint `F821` | An undefined name. Annotation-only names need an `if TYPE_CHECKING:` import. |
-| `deps` job | A pin doesn't resolve on that platform. The constraints are in `requirements.txt`: Python ≤ 3.11 and numpy < 2 for DeepFilterNet. `Mousegesture/others/requirements.txt` cannot resolve anywhere today: every mediapipe 0.8.x release has been removed from PyPI, so editing that file fails this job until the pin is moved. |
+| `deps` job | A pin doesn't resolve on that platform. The constraints are in `requirements.txt`: Python ≤ 3.11 and numpy < 2 for DeepFilterNet. `Mousegesture/others/requirements.txt` pins mediapipe 0.10.21, which also needs numpy < 2 and pulls in `opencv-contrib-python`; OpenCV therefore resolves to 4.11, the last release built for numpy 1. |
 | An `XPASS(strict)` failure | You fixed a pinned defect. Remove the `xfail` marker from that test. |
 
 ## Releases
