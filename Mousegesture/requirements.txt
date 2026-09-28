@@ -1,33 +1,49 @@
 # Mousegesture — runtime dependencies
 #
-# Pinned to the versions this project is developed and tested against
-# (Python 3.11.15).  Install with:
+# Pinned to one set that also works with the speech/NLU stack in the root
+# requirements.txt, so the whole project runs in a single venv on Python
+# 3.11 (verified on 3.11.9; 3.11.15 resolves to the identical set).
+# Install both together from the project root, so pip sees every
+# constraint at once:
 #
-#     pip install -r requirements.txt
+#     pip install -r requirements.txt -r Mousegesture/requirements.txt
+#
+# The shared constraint is numpy < 2: DeepFilterNet (root file) and
+# mediapipe 0.10.21 both require it, and that holds OpenCV at 4.11, the
+# last release built for numpy 1.  Do not `pip install -U` any of these.
 #
 # Every entry below is imported by the shipped code; nothing here is
 # aspirational.  The module each package provides is named in the comment
 # where it differs from the distribution name.
 
+# CPU-only torchvision, to match the root file's torch 2.13.0+cpu.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 # --- Vision pipeline -------------------------------------------------
-# Camera capture, colour conversion, overlay drawing.  opencv-python is
-# enough on its own; opencv-contrib-python is NOT required, and having
-# both installed is a known source of cv2 import conflicts.
+# Camera capture, colour conversion, overlay drawing.  Both OpenCV
+# distributions end up installed whatever this file lists: mediapipe
+# depends on opencv-contrib-python and ultralytics on opencv-python.
+# They provide the same cv2 module, so pin them to the SAME version.
+# The code uses no contrib-only modules.
+opencv-contrib-python==4.11.0.86
 opencv-python==4.11.0.86
 
-# Hand landmarks (21-point model).  Pinned tightly: the landmark index
-# layout and the handedness contract this code relies on are version
-# sensitive.
-mediapipe==0.10.14
+# Hand landmarks (21-point model) through mp.solutions.hands.  Pinned
+# tightly: the landmark index layout and the handedness contract this
+# code relies on are version sensitive.  0.10.21 still ships the legacy
+# solutions API (Tasks-only builds do not) and needs numpy < 2.
+mediapipe==0.10.21
 
-# YOLOv10n semantic gesture classifier.  Pulls in torch/torchvision
-# itself, which is why neither is pinned here — let ultralytics resolve
-# the pair it was built against.  For CUDA builds install torch from the
-# PyTorch index FIRST, then this file.
+# YOLOv10n semantic gesture classifier.  Needs torch and torchvision:
+# torch is pinned in the root requirements.txt, torchvision here to the
+# build that pairs with it (macOS resolves its own).  For CUDA, install
+# matching CUDA builds of both FIRST and drop the torchvision line.
 ultralytics==8.3.253
+torchvision==0.28.0+cpu ; sys_platform != "darwin"
 
-# Array backend shared by OpenCV and MediaPipe.
-numpy==2.4.6
+# Array backend shared by OpenCV and MediaPipe.  Same pin as the root
+# requirements.txt.
+numpy==1.26.4
 
 # --- Input / output --------------------------------------------------
 # Cursor movement and click injection (PynputCursor, ActionExecutor).
@@ -40,7 +56,8 @@ pynput==1.8.2
 # On Debian/Ubuntu it is a separate OS package: apt install python3-tk
 #
 # Gesture thumbnails in the Mapping Studio catalog.  Provides `PIL`.
-pillow==12.2.0
+# Same pin as requirements-test.txt.
+pillow==12.3.0
 
 # Multi-monitor enumeration for the target-screen setting (monitors.py).
 screeninfo==0.8.1

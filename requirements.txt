@@ -41,6 +41,11 @@ torchaudio==2.2.2 ; sys_platform == "darwin" and platform_machine == "x86_64"
 deepfilternet==0.5.6            # DFN3 denoiser (pulls DeepFilterLib)
 faster-whisper==1.2.1           # dictation transcription (CTranslate2, no torch)
 
+# Silero VAD runs on onnxruntime (speech_module/vad.py). faster-whisper pulls it
+# in too; pinning it keeps one version everywhere. 1.28 has no Intel-Mac wheel,
+# so Intel Macs take whichever version faster-whisper resolves.
+onnxruntime==1.28.0 ; sys_platform != "darwin" or platform_machine != "x86_64"
+
 # vosk 0.3.45 shipped no macOS wheel; 0.3.44 is universal2 (Intel + Apple Silicon).
 vosk==0.3.45 ; sys_platform != "darwin"
 vosk==0.3.44 ; sys_platform == "darwin"
