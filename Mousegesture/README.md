@@ -646,16 +646,16 @@ Mousegesture/
 
 ## Testing
 
-The module has an automated suite of **283 tests in nine `test_*.py` files**,
-written with `unittest` and also runnable under pytest. The tests import the
-real modules, so the packages in `requirements.txt` (and tkinter) must be
-installed, but none of them needs a camera, a GPU or the YOLO model, and none
-writes `gesture_config.json`: each test builds its rules in memory or uses a
-throwaway temp file.
+The module's tests live in [`tests/gesture/`](../tests/gesture/) with the rest
+of the project's suite, so CI runs them on every pull request. These nine
+files hold **283 tests**, written with `unittest` and run under pytest. They
+import the real modules, but none needs a camera, a GPU or the YOLO model, and
+none writes `gesture_config.json`: each test builds its rules in memory or uses
+a throwaway temp file.
 
 | File | Tests | Covers |
 |---|---:|---|
-| `test_gesture_fsm.py` | 57 | The semantic-transition engine in `gesture_fsm.py` |
+| `test_gesture_fsm_transitions.py` | 57 | The semantic-transition engine in `gesture_fsm.py` |
 | `test_action_dispatch.py` | 48 | What reaches the mouse backend: clicks, double-clicks, drags, swipes |
 | `test_config_lifecycle.py` | 44 | A mapping's path from the GUI to disk to the running engine |
 | `test_cursor_control.py` | 43 | The Cursor Control setting (gesture-gated cursor) |
@@ -665,24 +665,22 @@ throwaway temp file.
 | `test_preview_toggle.py` | 13 | The Live Preview show/hide toggle |
 | `test_cursor_clutch.py` | 10 | Cursor position when the cursor-control pose is left and resumed |
 
-Run from inside the `Mousegesture/` folder:
+Run from the project root:
 
 ```bash
-python -m unittest discover -p "test_*.py"        # whole suite, standard library only
-python -m pytest -o python_files="test_*.py" .    # whole suite under pytest
-python test_cursor_clutch.py                      # any one file on its own
+python -m pytest tests/gesture                            # all gesture tests
+python -m pytest tests/gesture/test_cursor_clutch.py      # any one file
 ```
 
-Keep the `test_*.py` patterns. unittest's default pattern also matches
-`test.py` and `testmoniter.py`, and importing `test.py` starts the old engine,
-camera included, because it has no `if __name__ == "__main__":` guard.
-pytest's default patterns would also import `gesture_test.py`, which is not a
-test file.
+pytest only collects under `tests/`, so `test.py`, `testmoniter.py` and
+`gesture_test.py` in this folder (which are not test files, and `test.py`
+starts the old engine, camera included, on import) are never imported.
 
-**Real key presses.** No test moves or clicks the real mouse, but five swipe
-tests (three in `test_action_dispatch.py`, two in `test_swipe_actions.py`)
-press the real Left and Right arrow keys through pynput. Keep a window focused
-where arrow keys are harmless while the suite runs.
+**No real input.** The suite-wide `tests/conftest.py` replaces pynput with a
+recorder, so no test moves the mouse or presses a key, and
+`tests/gesture/conftest.py` stands in for cv2 and mediapipe where they are not
+installed. The tests need only `requirements-test.txt` plus tkinter (part of a
+standard Python install); no window is ever opened.
 
 ### Diagnostic probes
 
