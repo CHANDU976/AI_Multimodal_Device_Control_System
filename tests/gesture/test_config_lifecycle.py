@@ -295,9 +295,13 @@ class RuleIdTests(LifecycleCase):
         self.assertEqual(studio.deleted, [])
 
     def test_generated_ids_do_not_repeat(self):
+        # Ids carry 32 random bits, so by the birthday bound n ids collide
+        # with probability ~ n^2 / 2^33: 4.6% at n = 20,000 (a flaky test),
+        # 0.05% at 2,000 -- still plenty to catch a non-random generator,
+        # while a real rule set holds a few dozen rules.
         seen = {new_rule("a", "b", "LEFT_CLICK")["id"]
-                for _ in range(20000)}
-        self.assertEqual(len(seen), 20000)
+                for _ in range(2000)}
+        self.assertEqual(len(seen), 2000)
 
     def test_two_active_rules_sharing_an_id_keep_the_first(self):
         shared = "rSAME"
