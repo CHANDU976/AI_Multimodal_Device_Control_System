@@ -19,6 +19,7 @@ developer machine and is git-ignored.
 
 | PR | Title | Author | Verdict | Files | +/− | Tests | Modules | Date |
 | --- | --- | --- | --- | ---: | --- | --- | --- | --- |
+| [#12](PR-0012/README.md) | Move the gesture requirements to MediaPipe 0.10.21 for Python 3.11 | CHANDU976 | ⚠️ attention | 4 | +16/−17 | 5575✓ 0✗ | ci, dependencies, docs | 2026-09-28 |
 | [#11](PR-0011/README.md) | Gesture dev | BangerAtifAhmed | ⚠️ attention | 27 | +9235/−164 | 5575✓ 0✗ | dependencies, docs, gesture, tests | 2026-09-28 |
 | [#10](PR-0010/README.md) | Vv2 | CHANDU976 | ⚠️ attention | 30171 | +833/−5839095 | 4720✓ 0✗ | central, ci, docs, speech, tests | 2026-09-27 |
 | [#9](PR-0009/README.md) | Implement speech IPC message generation | CHANDU976 | ⚠️ attention | 5 | +158/−22 | 4620✓ 0✗ | central, speech | 2026-09-27 |

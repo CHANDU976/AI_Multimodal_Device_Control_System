@@ -1,6 +1,32 @@
 {
-  "generated_at": "2026-09-28T12:54:49Z",
+  "generated_at": "2026-09-28T12:57:41Z",
   "reports": [
+    {
+      "folder": "PR-0012",
+      "number": 12,
+      "title": "Move the gesture requirements to MediaPipe 0.10.21 for Python 3.11",
+      "author": "CHANDU976",
+      "generated_at": "2026-09-28T12:57:26Z",
+      "verdict": "attention",
+      "files": 4,
+      "additions": 16,
+      "deletions": 17,
+      "tests": {
+        "tests": 5675,
+        "passed": 5575,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 88,
+        "xfailed": 12,
+        "suites": 4
+      },
+      "areas": [
+        "ci",
+        "dependencies",
+        "docs"
+      ],
+      "head": "2926ec83ba03a2471a9ea63d62d105e9f397d1f4"
+    },
     {
       "folder": "PR-0011",
       "number": 11,

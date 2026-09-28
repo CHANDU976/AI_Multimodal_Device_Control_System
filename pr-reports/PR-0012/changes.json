@@ -1,0 +1,90 @@
+{
+  "areas": [
+    {
+      "area": "ci",
+      "title": "CI/CD & tooling",
+      "files": 1,
+      "additions": 3,
+      "deletions": 3,
+      "binary": 0,
+      "components": {
+        "workflows": 1
+      }
+    },
+    {
+      "area": "dependencies",
+      "title": "Dependency pins",
+      "files": 1,
+      "additions": 5,
+      "deletions": 8,
+      "binary": 0,
+      "components": {
+        "Mousegesture/others/requirements.txt": 1
+      }
+    },
+    {
+      "area": "docs",
+      "title": "Documentation",
+      "files": 2,
+      "additions": 8,
+      "deletions": 6,
+      "binary": 0,
+      "components": {
+        "gesture": 1,
+        "docs": 1
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "status": "M",
+      "additions": 3,
+      "deletions": 3,
+      "binary": false,
+      "old_path": null,
+      "area": "ci",
+      "component": "workflows"
+    },
+    {
+      "path": "Mousegesture/README.md",
+      "status": "M",
+      "additions": 7,
+      "deletions": 5,
+      "binary": false,
+      "old_path": null,
+      "area": "docs",
+      "component": "gesture"
+    },
+    {
+      "path": "Mousegesture/others/requirements.txt",
+      "status": "M",
+      "additions": 5,
+      "deletions": 8,
+      "binary": false,
+      "old_path": null,
+      "area": "dependencies",
+      "component": "Mousegesture/others/requirements.txt"
+    },
+    {
+      "path": "docs/ci-cd.md",
+      "status": "M",
+      "additions": 1,
+      "deletions": 1,
+      "binary": false,
+      "old_path": null,
+      "area": "docs",
+      "component": "docs"
+    }
+  ],
+  "collapsed": {},
+  "commits": [
+    {
+      "sha": "709b3e51b5c147fee641dff08b8248bd9289c56b",
+      "short": "709b3e5",
+      "author": "CHANDAN B L",
+      "date": "2026-09-28",
+      "subject": "Move the gesture requirements to MediaPipe 0.10.21 for Python 3.11"
+    }
+  ]
+}

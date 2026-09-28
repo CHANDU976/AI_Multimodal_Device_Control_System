@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "meta": {
+    "number": 12,
+    "title": "Move the gesture requirements to MediaPipe 0.10.21 for Python 3.11",
+    "author": "CHANDU976",
+    "url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/pull/12",
+    "base_ref": "main",
+    "head_ref": "gesture-requirements-py311",
+    "event": "push",
+    "run_url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/actions/runs/36424650331",
+    "repository": "CHANDU976/AI_Multimodal_Device_Control_System",
+    "generated_at": "2026-09-28T12:57:26Z"
+  },
+  "range": {
+    "base": "8c2774ac633bfa622568271f8df88bf0939bacd1",
+    "head": "2926ec83ba03a2471a9ea63d62d105e9f397d1f4",
+    "behind": 0
+  },
+  "verdict": "attention",
+  "verdict_reasons": [
+    "Dependency pins changed"
+  ],
+  "totals": {
+    "files": 4,
+    "additions": 16,
+    "deletions": 17,
+    "commits": 1
+  },
+  "areas": {
+    "ci": {
+      "files": 1,
+      "additions": 3,
+      "deletions": 3
+    },
+    "dependencies": {
+      "files": 1,
+      "additions": 5,
+      "deletions": 8
+    },
+    "docs": {
+      "files": 2,
+      "additions": 8,
+      "deletions": 6
+    }
+  },
+  "tests": {
+    "tests": 5675,
+    "passed": 5575,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 88,
+    "xfailed": 12,
+    "suites": 4
+  },
+  "changed_line_coverage": null,
+  "attention": [
+    "Dependency pins changed",
+    "CI/tooling changed"
+  ]
+}

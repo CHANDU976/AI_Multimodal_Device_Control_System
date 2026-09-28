@@ -1,0 +1,5 @@
+ .github/workflows/ci.yml             |  6 +++---
+ Mousegesture/README.md               | 12 +++++++-----
+ Mousegesture/others/requirements.txt | 13 +++++--------
+ docs/ci-cd.md                        |  2 +-
+ 4 files changed, 16 insertions(+), 17 deletions(-)
