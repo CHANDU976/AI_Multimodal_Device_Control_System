@@ -260,9 +260,9 @@ jobs:
           - { os: ubuntu-latest,  python: "3.11", file: requirements.txt }
           - { os: windows-latest, python: "3.11", file: requirements.txt }
           - { os: macos-latest,   python: "3.11", file: requirements.txt }
-          # mediapipe 0.8.11 publishes wheels for Python <= 3.10 only.
-          - { os: ubuntu-latest,  python: "3.10", file: Mousegesture/others/requirements.txt }
-          - { os: windows-latest, python: "3.10", file: Mousegesture/others/requirements.txt }
+          # The project's Python: mediapipe 0.10.21 ships cp311 wheels.
+          - { os: ubuntu-latest,  python: "3.11", file: Mousegesture/others/requirements.txt }
+          - { os: windows-latest, python: "3.11", file: Mousegesture/others/requirements.txt }
           - { os: ubuntu-latest,  python: "3.11", file: requirements-test.txt }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
