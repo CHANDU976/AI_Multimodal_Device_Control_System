@@ -20,8 +20,8 @@ import unittest
 import uuid
 
 import gesture_fsm
-from gesture_fsm import (SWIPE_LEFT, SWIPE_RIGHT, ACTIONS, MOUSE_ACTIONS,
-                         load_config, save_config, GestureFSM)
+from gesture_fsm import (SWIPE_LEFT, SWIPE_RIGHT, ACTIONS, MACRO_ACTIONS,
+                         MOUSE_ACTIONS, load_config, save_config, GestureFSM)
 
 
 def new_rule(from_state, to_state, action, **extra):
@@ -49,20 +49,24 @@ def config(*rules):
 class SwipeActionAvailabilityTests(unittest.TestCase):
     """The new actions are in the catalog and exportable."""
 
+    # Swipes press arrow keys, so they are keyboard macros, not mouse
+    # actions -- every action belongs to exactly one of the two groups.
     def test_swipe_left_is_a_valid_action(self):
         self.assertEqual(SWIPE_LEFT, "SWIPE_LEFT")
         self.assertIn(SWIPE_LEFT, ACTIONS)
-        self.assertIn(SWIPE_LEFT, MOUSE_ACTIONS)
+        self.assertIn(SWIPE_LEFT, MACRO_ACTIONS)
+        self.assertNotIn(SWIPE_LEFT, MOUSE_ACTIONS)
 
     def test_swipe_right_is_a_valid_action(self):
         self.assertEqual(SWIPE_RIGHT, "SWIPE_RIGHT")
         self.assertIn(SWIPE_RIGHT, ACTIONS)
-        self.assertIn(SWIPE_RIGHT, MOUSE_ACTIONS)
+        self.assertIn(SWIPE_RIGHT, MACRO_ACTIONS)
+        self.assertNotIn(SWIPE_RIGHT, MOUSE_ACTIONS)
 
     def test_both_actions_appear_in_selectable_dropdown(self):
         from app import SELECTABLE_ACTIONS
-        self.assertIn(SWIPE_LEFT, SELECTABLE_ACTIONS)
-        self.assertIn(SWIPE_RIGHT, SELECTABLE_ACTIONS)
+        self.assertEqual(SELECTABLE_ACTIONS.count(SWIPE_LEFT), 1)   # once, not twice
+        self.assertEqual(SELECTABLE_ACTIONS.count(SWIPE_RIGHT), 1)
 
 
 class SwipeActionLifecycleTests(unittest.TestCase):

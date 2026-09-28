@@ -121,11 +121,12 @@ MEDIA_PLAY_PAUSE = "MEDIA_PLAY_PAUSE"
 
 KEYBOARD_MACRO = "KEYBOARD_MACRO"
 
-# Mouse actions are the ones the cursor backend performs directly.
+# Mouse actions are the ones the cursor backend performs directly.  The
+# swipes are not among them: they press arrow keys, so they are macros
+# (see ACTION_MACROS) and each action belongs to exactly one group.
 MOUSE_ACTIONS = (
     LEFT_CLICK, RIGHT_CLICK, MIDDLE_CLICK, DOUBLE_CLICK,
     DRAG_START, DRAG_STOP, SCROLL_UP, SCROLL_DOWN,
-    SWIPE_LEFT, SWIPE_RIGHT,
 )
 
 # Named macros expand to a chord.  Keeping the expansion here rather than
