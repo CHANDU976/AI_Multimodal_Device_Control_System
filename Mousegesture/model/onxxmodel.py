@@ -1,5 +1,9 @@
+from pathlib import Path
+
 import cv2
 import numpy as np
+
+MODEL_DIR = Path(__file__).resolve().parent
 
 CLASS_NAMES = (
     "grabbing","grip","holy","point","call","three3","timeout",
@@ -10,7 +14,7 @@ CLASS_NAMES = (
     "thumb_index","thumb_index2","no_gesture"
 )
 
-net = cv2.dnn.readNet("model/YOLOv10n_gestures.onnx")
+net = cv2.dnn.readNet(str(MODEL_DIR / "YOLOv10n_gestures.onnx"))
 
 cap = cv2.VideoCapture(1)
 

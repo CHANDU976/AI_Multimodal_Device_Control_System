@@ -23,12 +23,25 @@ def ops(rec):
     ("RIGHT_CLICK", [("mouse.click", "Button.right", 1)]),
     ("MIDDLE_CLICK", [("mouse.click", "Button.middle", 1)]),
     ("DOUBLE_CLICK", [("mouse.click", "Button.left", 2)]),
-    ("SCROLL_UP", [("mouse.scroll", 0, 2)]),
-    ("SCROLL_DOWN", [("mouse.scroll", 0, -2)]),
+    ("SCROLL_UP", [("mouse.scroll", 0, 1)]),          # a scroll starts slow …
+    ("SCROLL_DOWN", [("mouse.scroll", 0, -1)]),
 ])
 def test_mouse_actions(fake_input, action, expected):
     assert ActionExecutor().dispatch(action) is True
     assert ops(fake_input) == expected
+
+
+def test_held_scroll_accelerates_then_restarts_after_a_pause(fake_input):
+    # … and speeds up while the gesture is held: repeats less than 0.5 s
+    # apart are one scroll, reaching 10 units per update after 3 s.
+    ex = ActionExecutor()
+    for i in range(9):
+        ex.dispatch("SCROLL_DOWN", now=i * 0.4)
+    units = [-e[2] for e in ops(fake_input)]
+    assert units[0] == 1 and units[-1] == 10
+    assert units == sorted(units)                     # never slows down mid-scroll
+    ex.dispatch("SCROLL_DOWN", now=8 * 0.4 + 0.8)     # after a pause: a new scroll
+    assert ops(fake_input)[-1] == ("mouse.scroll", 0, -1)
 
 
 def test_named_macro_presses_then_releases_in_reverse(fake_input):
@@ -156,13 +169,25 @@ def test_dispatcher_click_and_drag(hc, capsys):
     assert (d.last_action, d.last_action_time) == ("DRAG_STOP", 3.0)
 
 
-def test_dispatcher_double_click_completes_an_os_double(hc):
-    # The FSM emits LEFT_CLICK then, within the window, DOUBLE_CLICK in place
-    # of the second click — the OS already has one click, so one more click
-    # completes the double.
+def test_dispatcher_standalone_double_click_sends_two_clicks(hc):
+    # A DOUBLE_CLICK with no click before it (a rule bound to DOUBLE_CLICK)
+    # is a whole double: two presses, not left to the OS double-click timer.
     cursor = RecordingCursor()
     hc.ActionDispatcher(cursor).dispatch("DOUBLE_CLICK", 0.0)
-    assert cursor.calls == [("click", "left", 1)]
+    assert cursor.calls == [("click", "left", 2)]
+
+
+def test_dispatcher_promoted_double_click_completes_an_os_double(hc):
+    # The FSM emits LEFT_CLICK then, within the window, DOUBLE_CLICK from the
+    # same rule in place of the second click — the OS already has one click,
+    # so one more completes the double (two would read as a triple).
+    cursor = RecordingCursor()
+    d = hc.ActionDispatcher(cursor)
+    d.dispatch(ActionEvent("LEFT_CLICK", rule_id="r1"), 0.0)
+    d.dispatch(ActionEvent("DOUBLE_CLICK", rule_id="r1"), 0.2)
+    assert cursor.calls == [("click", "left", 1), ("click", "left", 1)]
+    d.dispatch(ActionEvent("DOUBLE_CLICK", rule_id="r1"), 5.0)   # partner used up
+    assert cursor.calls[-1] == ("click", "left", 2)
 
 
 def test_failed_press_does_not_claim_a_drag(hc, capsys):
