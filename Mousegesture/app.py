@@ -199,6 +199,12 @@ CAM_ERROR = "ERROR"
 # reflected in the UI without anything having to notice and report it.
 CAMERA_SYNC_MS = 300
 
+# Capacity of the protocol event queue (see IPC_EVENTS.md).  Bounded so a
+# missing or slow consumer costs dropped messages, never memory: put_nowait
+# raises queue.Full, which the engine's tracker catches and counts in
+# engine.events.sink_errors without ever blocking the tracking loop.
+EVENT_QUEUE_MAXSIZE = 1024
+
 
 def timing_label(rule) -> str:
     """How a transition's timing reads in the UI.
@@ -622,6 +628,9 @@ class GestureStudio(tk.Tk):
         self._camera_scan = queue.Queue()
         self._camera_scan_busy = False
         self._engine_result = queue.Queue()
+        # Protocol events from the engine, for a future consumer.  Owned
+        # here so it outlives camera reconnects; filled, never drained.
+        self.event_queue = queue.Queue(maxsize=EVENT_QUEUE_MAXSIZE)
         self._video_job = None
         # Display preference only; survives connect, disconnect and tab
         # switches because it lives here rather than on a widget.
@@ -3147,9 +3156,15 @@ class GestureStudio(tk.Tk):
                     import os
                     cursor_enable_gesture = os.environ.get(
                         "CURSOR_ENABLE_GESTURE", None)
+                    # The sink is installed at construction, so it is in
+                    # place before start() can produce an event, and only
+                    # once: reconnects reuse this engine.
+                    events = getattr(self, "event_queue", None)
                     self.engine = hand_cursor_2.HandTrackerEngine(
                         enable_monitor=False, verbose=True,
-                        cursor_enable_gesture=cursor_enable_gesture)
+                        cursor_enable_gesture=cursor_enable_gesture,
+                        event_sink=(None if events is None
+                                    else events.put_nowait))
                 ok = self.engine.start(index)
                 error = self.engine.status.get("error")
             except Exception as exc:
