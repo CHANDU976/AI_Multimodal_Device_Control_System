@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "meta": {
+    "number": 13,
+    "title": "feat: add gesture event reporting and queue sink integration",
+    "author": "BangerAtifAhmed",
+    "url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/pull/13",
+    "base_ref": "main",
+    "head_ref": "gesture_dev",
+    "event": "push",
+    "run_url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/actions/runs/38700405351",
+    "repository": "CHANDU976/AI_Multimodal_Device_Control_System",
+    "generated_at": "2026-10-15T07:43:16Z"
+  },
+  "range": {
+    "base": "9ee0caf4b02a4d3de3bc576d5569f4679e1a42b7",
+    "head": "6f60a3da914b72cc72bc2882a931d2c9b23a8857",
+    "behind": 0
+  },
+  "verdict": "attention",
+  "verdict_reasons": [
+    "Source changed without test changes",
+    "changed-line coverage 7.9% < 60%",
+    "1 new advisory lint finding(s)"
+  ],
+  "totals": {
+    "files": 5,
+    "additions": 1965,
+    "deletions": 12,
+    "commits": 1
+  },
+  "areas": {
+    "gesture": {
+      "files": 4,
+      "additions": 1830,
+      "deletions": 12
+    },
+    "docs": {
+      "files": 1,
+      "additions": 135,
+      "deletions": 0
+    }
+  },
+  "tests": {
+    "tests": 5675,
+    "passed": 5575,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 88,
+    "xfailed": 12,
+    "suites": 4
+  },
+  "changed_line_coverage": 7.9,
+  "attention": [
+    "Source changed without test changes",
+    "Needs a hands-on check CI cannot do",
+    "Large change set (1977 lines)"
+  ]
+}

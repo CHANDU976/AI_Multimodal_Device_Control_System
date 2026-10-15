@@ -1,6 +1,31 @@
 {
-  "generated_at": "2026-09-28T12:57:41Z",
+  "generated_at": "2026-10-15T07:43:34Z",
   "reports": [
+    {
+      "folder": "PR-0013",
+      "number": 13,
+      "title": "feat: add gesture event reporting and queue sink integration",
+      "author": "BangerAtifAhmed",
+      "generated_at": "2026-10-15T07:43:16Z",
+      "verdict": "attention",
+      "files": 5,
+      "additions": 1965,
+      "deletions": 12,
+      "tests": {
+        "tests": 5675,
+        "passed": 5575,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 88,
+        "xfailed": 12,
+        "suites": 4
+      },
+      "areas": [
+        "docs",
+        "gesture"
+      ],
+      "head": "6f60a3da914b72cc72bc2882a931d2c9b23a8857"
+    },
     {
       "folder": "PR-0012",
       "number": 12,

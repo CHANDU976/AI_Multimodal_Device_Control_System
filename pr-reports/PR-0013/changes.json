@@ -1,0 +1,91 @@
+{
+  "areas": [
+    {
+      "area": "gesture",
+      "title": "Gesture module",
+      "files": 4,
+      "additions": 1830,
+      "deletions": 12,
+      "binary": 0,
+      "components": {
+        "studio-gui": 1,
+        "gesture_events": 1,
+        "engine": 1,
+        "test_gesture_events": 1
+      }
+    },
+    {
+      "area": "docs",
+      "title": "Documentation",
+      "files": 1,
+      "additions": 135,
+      "deletions": 0,
+      "binary": 0,
+      "components": {
+        "gesture": 1
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "Mousegesture/IPC_EVENTS.md",
+      "status": "A",
+      "additions": 135,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "docs",
+      "component": "gesture"
+    },
+    {
+      "path": "Mousegesture/app.py",
+      "status": "M",
+      "additions": 16,
+      "deletions": 1,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "studio-gui"
+    },
+    {
+      "path": "Mousegesture/gesture_events.py",
+      "status": "A",
+      "additions": 545,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "gesture_events"
+    },
+    {
+      "path": "Mousegesture/hand_cursor_2.py",
+      "status": "M",
+      "additions": 189,
+      "deletions": 11,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "engine"
+    },
+    {
+      "path": "Mousegesture/test_gesture_events.py",
+      "status": "A",
+      "additions": 1080,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "test_gesture_events"
+    }
+  ],
+  "collapsed": {},
+  "commits": [
+    {
+      "sha": "1afc8a5792e7e80489c424475a5fe78cd191ca7b",
+      "short": "1afc8a5",
+      "author": "BangerAtifAhmed",
+      "date": "2026-10-15",
+      "subject": "feat: add gesture event reporting and queue sink integration"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+ Mousegesture/IPC_EVENTS.md          |  135 ++++++++++
+ Mousegesture/app.py                 |   17 +-
+ Mousegesture/gesture_events.py      |  545 ++++++++++++++++++++++++++++++++++++++
+ Mousegesture/hand_cursor_2.py       |  200 +++++++++++++-
+ Mousegesture/test_gesture_events.py | 1080 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 1965 insertions(+), 12 deletions(-)
