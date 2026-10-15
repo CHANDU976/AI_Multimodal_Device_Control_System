@@ -100,6 +100,7 @@ import numpy as np          # already a hard dependency of cv2 and mediapipe
 from monitors import (ALL_SCREENS, enumerate_monitors, monitor_labels,
                       monitor_union, resolve_monitor_target)
 import adaptive_timing
+import gesture_events
 from gesture_fsm import (HAND_ANY, HAND_BOTH, HAND_LEFT, HAND_RIGHT,
                          normalise_hand)
 
@@ -4127,7 +4128,17 @@ class HandTrackerEngine:
     ScreenGeometry.to_screen() reads them by name on every call; the setter
     methods below rebind them, which is what makes a change take effect on
     the very next frame with no object to keep in sync.
+
+    Protocol events (pointing, gestures, drags, ready, fatal, heartbeat)
+    are reported through `self.events`, a GestureEventTracker.  Pass
+    `event_sink` -- or call `engine.events.set_sink(...)` later -- to
+    receive the finished JSON-ready dicts; with no sink none are built.
     """
+
+    # Class-level None, so an engine built with object.__new__ -- as the
+    # tests do -- reports nothing instead of raising.  __init__ installs
+    # the real tracker.
+    events = None
 
     def __init__(self, *, enable_yolo=YOLO_ENABLED,
                  enable_macros=YOLO_MACRO_ENABLED,
@@ -4135,8 +4146,10 @@ class HandTrackerEngine:
                  cursor_enable_gesture=None,
                  cursor_control_mode="always",
                  cursor_control_gesture=None,
-                 cursor_control_hand="any"):
+                 cursor_control_hand="any",
+                 event_sink=None):
         self.verbose = bool(verbose)
+        self.events = gesture_events.GestureEventTracker(event_sink)
         self._enable_yolo = bool(enable_yolo)
         self._enable_macros = bool(enable_macros)
         self._enable_monitor = bool(enable_monitor)
@@ -4431,7 +4444,7 @@ class HandTrackerEngine:
         Safe to call while the camera is running, and safe to call when
         it is not.
         """
-        if self.actions.release():
+        if self._release_button(gesture_events.REASON_CONFIG_RELOADED):
             self._log("[action] DRAG_STOP (config reloaded)")
         self._apply_config()
         self._log("[config] reloaded — %s" % self.fsm.describe())
@@ -4484,6 +4497,8 @@ class HandTrackerEngine:
         self._ensure_yolo()
         self._ensure_monitor()
 
+        if self.events is not None:
+            self.events.begin()
         self._thread = threading.Thread(target=self._run, name="HandTracker",
                                         daemon=True)
         self._thread.start()
@@ -4503,8 +4518,10 @@ class HandTrackerEngine:
             self._thread.join(timeout=2.0)
         self._thread = None
 
-        if self.actions.release():
+        if self._release_button(gesture_events.REASON_ENGINE_STOPPED):
             self._log("[action] DRAG_STOP (engine stopped)")
+        if self.events is not None:
+            self.events.end(gesture_events.REASON_ENGINE_STOPPED)
         for machine in (self.fsm, self.semantic_fsm):
             if machine is not None:
                 machine.reset()
@@ -4555,6 +4572,9 @@ class HandTrackerEngine:
                 closer.close()
             except Exception:
                 pass
+
+        if self.events is not None:
+            self.events.close(gesture_events.REASON_SHUTDOWN)
 
     def __enter__(self):
         return self
@@ -4961,6 +4981,95 @@ class HandTrackerEngine:
         self._reported.add(key)
         print(message)
 
+    # ── protocol events ─────────────────────────────────────────────────
+    # Observers only.  Each helper performs exactly the call it replaces
+    # and reports what that call actually did; none of them decides
+    # anything the engine did not already decide.
+
+    def _release_button(self, reason) -> bool:
+        """actions.release(), plus drag_stopped when the button came up."""
+        released = self.actions.release()
+        if released and self.events is not None:
+            self.events.drag_stopped(reason)
+        return released
+
+    def _dispatch_action(self, actions, action, now, stream, hand, machine,
+                         scored_pose=None, score=None) -> None:
+        """actions.dispatch(), then report what the firing amounted to.
+
+        Reported from a finally so a dispatch that raises still leaves the
+        reported drag state matching ActionDispatcher.dragging, which is
+        the only state that knows whether the press reached the OS.
+        """
+        events = self.events
+        if events is None:
+            actions.dispatch(action, now)
+            return
+        was_dragging = actions.dragging
+        try:
+            actions.dispatch(action, now)
+        finally:
+            self._report_action(events, actions, action, was_dragging,
+                                stream, hand, machine, scored_pose, score)
+
+    @staticmethod
+    def _report_action(events, actions, action, was_dragging, stream, hand,
+                       machine, scored_pose, score) -> None:
+        """One FSM ActionEvent -> at most one protocol message.
+
+        DRAG_START / DRAG_STOP are reported as the drag lifecycle, from
+        the dispatcher's button state, and not also as gesture_fired: one
+        drag is one drag_started.  Everything else the FSM fired is a
+        gesture_fired, whether or not the backend accepted it ("executed").
+        """
+        try:
+            rule_id = getattr(action, "rule_id", None)
+            info = gesture_events.describe_rule(machine, rule_id)
+            dragging = actions.dragging
+
+            if action == DRAG_START or action == DRAG_STOP:
+                if dragging and not was_dragging:
+                    events.drag_started(
+                        gesture=info["gesture"], hand=hand, rule_id=rule_id,
+                        rule_name=getattr(action, "rule_name", None),
+                        stream=stream)
+                elif was_dragging and not dragging:
+                    # An explicit DRAG_STOP mapping carries its own rule;
+                    # the FSM's stuck-release / timeout / reset path
+                    # re-emits the rule that STARTED the drag.
+                    events.drag_stopped(
+                        gesture_events.REASON_GESTURE
+                        if info["rule_action"] == DRAG_STOP
+                        else gesture_events.REASON_FSM_FAILSAFE)
+                return
+
+            # A score is the classifier's verdict on the pose it was fed
+            # this frame.  It belongs to the firing only when that pose IS
+            # the one the rule fired on; geometry has no score at all.
+            confidence = (score if score is not None
+                          and scored_pose is not None
+                          and scored_pose == info["gesture"] else None)
+            events.gesture_fired(
+                gesture=info["gesture"], from_gesture=info["from_gesture"],
+                trigger=info["trigger"], hand=hand, action=str(action),
+                confidence=confidence, rule_id=rule_id,
+                rule_name=getattr(action, "rule_name", None), stream=stream,
+                executed=actions.last_action is action)
+        except Exception as exc:                # pragma: no cover
+            print(f"[events] could not report {action!s} "
+                  f"({exc.__class__.__name__}: {exc})")
+
+    def _semantic_status(self, yolo_worker) -> str:
+        """'ready' / 'loading' / 'unavailable' / 'disabled'."""
+        if yolo_worker is None:
+            return ("disabled" if not getattr(self, "_enable_yolo", False)
+                    else "unavailable")
+        if yolo_worker.ready:
+            return "ready"
+        if yolo_worker.load_error is not None:
+            return "unavailable"
+        return "loading"
+
     # ── the loop ────────────────────────────────────────────────────────
 
     def _run(self) -> None:
@@ -4984,6 +5093,10 @@ class HandTrackerEngine:
         actions = self.actions
         yolo_worker = self.yolo_worker
         macros = self.macros
+        # Protocol events.  None on an engine built without __init__.
+        events = self.events
+        fatal_error = None
+        last_fresh_t = time.perf_counter()
 
         oef_x = OneEuroFilter(freq=30.0, min_cutoff=MIN_CUTOFF, beta=BETA,
                               d_cutoff=D_CUTOFF)
@@ -5029,9 +5142,6 @@ class HandTrackerEngine:
         try:
             while not self._stop_event.is_set():
                 success, raw_frame, seq = stream.read()
-                if not success:
-                    time.sleep(0.001)
-                    continue
 
                 # ── Duplicate frame guard ───────────────────────────────
                 # The loop can outrun the camera.  Re-running MediaPipe on
@@ -5039,12 +5149,41 @@ class HandTrackerEngine:
                 # identical answer.  The original yielded here through
                 # cv2.waitKey(1); with no window there is nothing to pump,
                 # so the sleep is what keeps this from spinning a core.
-                if seq == last_seq:
+                if not success or seq == last_seq:
+                    # A camera that stops delivering keeps serving its
+                    # last frame, so this is the only place a stall shows.
+                    # Reported, not acted on: one clock read per idle spin.
+                    if events is not None:
+                        _idle_t = time.perf_counter()
+                        if (_idle_t - last_fresh_t
+                                > gesture_events.CAMERA_STALL_SEC):
+                            events.set_pointing(
+                                False, hand_present=None,
+                                reason=gesture_events.REASON_CAMERA_STALLED,
+                                cursor_control=self._cursor_control_mode)
+                            if _idle_t >= events.next_heartbeat:
+                                events.heartbeat(
+                                    _idle_t, hand_present=None,
+                                    camera="stalled",
+                                    semantic=self._semantic_status(
+                                        yolo_worker),
+                                    fps=0.0)
                     time.sleep(0.001)
                     continue
                 last_seq = seq
 
                 now_ts = time.perf_counter()
+                last_fresh_t = now_ts
+
+                # ── Ready: the first fresh frame of this start() ────────
+                # Camera delivering, MediaPipe built (start() warmed it),
+                # rule set compiled.  The semantic branch may still be
+                # loading in the background; the payload says so.
+                if events is not None and not events.ready:
+                    events.mark_ready(
+                        camera_index=self.camera_index,
+                        semantic=self._semantic_status(yolo_worker),
+                        cursor_control=self._cursor_control_mode)
 
                 # ── Live config reload ──────────────────────────────────
                 # One integer compare per frame.  Re-read on this thread
@@ -5253,7 +5392,9 @@ class HandTrackerEngine:
                                 hand=hand_side,
                                 hand_count=len(detected_hands or ()))
                             if action is not None:
-                                actions.dispatch(action, now_ts)
+                                self._dispatch_action(
+                                    actions, action, now_ts,
+                                    SOURCE_GEOMETRY, hand_side, fsm)
                                 # Not while dragging: a drag exists to
                                 # move the pointer, so holding it still
                                 # would break the one action that needs
@@ -5326,6 +5467,16 @@ class HandTrackerEngine:
                         gesture, hand_side, last_semantic,
                         dragging=actions.dragging)
 
+                    # Pointing = a hand in view AND the gate open.  One
+                    # bool compare per frame; a message only on a change.
+                    if events is not None \
+                            and cursor_enabled != events.pointing:
+                        events.set_pointing(
+                            cursor_enabled, hand=hand_side,
+                            hand_present=True,
+                            reason=gesture_events.REASON_GATE_CLOSED,
+                            cursor_control=self._cursor_control_mode)
+
                     # Gate re-opening near where it shut: the cursor
                     # carries on from where it stopped (CursorClutch).
                     # Holds armed while it was shut are dropped and the
@@ -5382,10 +5533,15 @@ class HandTrackerEngine:
                 else:
                     hand_present = False
                     self._validator.reset()
+                    if events is not None and events.pointing:
+                        events.set_pointing(
+                            False, hand=hand_side, hand_present=False,
+                            reason=gesture_events.REASON_HAND_LOST,
+                            cursor_control=self._cursor_control_mode)
                     # FAILSAFE, and the order matters: drop the button
                     # BEFORE clearing the FSM.  The hand is gone, so no
                     # further transition is coming to end the drag.
-                    if actions.release():
+                    if self._release_button(gesture_events.REASON_HAND_LOST):
                         self._log("[action] DRAG_STOP (hand lost)")
 
                     # GEOMETRIC ONLY.  "Hand lost" is a statement about
@@ -5704,7 +5860,10 @@ class HandTrackerEngine:
                                                   else "NONE")))
 
                             if _sem is not None:
-                                actions.dispatch(_sem, now_ts)
+                                self._dispatch_action(
+                                    actions, _sem, now_ts, SOURCE_SEMANTIC,
+                                    _sem_hand or hand_side, semantic_fsm,
+                                    scored_pose=_sem_pose, score=_ys)
                                 if not actions.dragging:
                                     stabiliser.note_action(now_ts)
 
@@ -5797,14 +5956,33 @@ class HandTrackerEngine:
                     "last_action": actions.last_action,
                 })
 
+                # ── Heartbeat: one float compare until it is due ────────
+                if events is not None and now_ts >= events.next_heartbeat:
+                    events.heartbeat(
+                        now_ts, hand_present=bool(seen), camera="live",
+                        semantic=self._semantic_status(yolo_worker),
+                        fps=fps)
+
         except Exception as exc:                # pragma: no cover - runtime
+            fatal_error = exc
             self.status["error"] = f"{exc.__class__.__name__}: {exc}"
             self._log(f"[engine] loop stopped: {self.status['error']}")
         finally:
             # The button must not outlive the loop, whatever ended it.
-            if self.actions.release():
+            if self._release_button(
+                    gesture_events.REASON_ENGINE_STOPPED
+                    if fatal_error is None
+                    else gesture_events.REASON_FATAL):
                 self._log("[action] DRAG_STOP (loop exit)")
             self.status["running"] = False
+            # Nothing restarts a crashed loop: that is the fatal boundary.
+            # A requested stop ends the lifecycle quietly instead.
+            if events is not None:
+                if fatal_error is None:
+                    events.end(gesture_events.REASON_ENGINE_STOPPED)
+                else:
+                    events.fatal(gesture_events.FATAL_TRACKING_LOOP,
+                                 self.status["error"])
 
 
 # ═══════════════════════════════════════════════════════════════════════════
