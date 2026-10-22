@@ -197,7 +197,7 @@
     }
   ],
   "cursor_control": {
-    "mode": "gesture-based",
+    "mode": "always",
     "gesture": "stop",
     "hand": "any"
   }
