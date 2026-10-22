@@ -69,9 +69,9 @@ the central module just owns its lifecycle. Point preferences at it:
 }
 ```
 
-Optionally, if it prints `{"type": "gesture", "name": "fist"}` lines on
-stdout, map gestures to spoken commands and they run through the central
-pipeline:
+Optionally, if it prints `gesture_fired` events on stdout (the shared
+protocol in [`docs/ipc-protocol.md`](../docs/ipc-protocol.md)), map gesture
+names to spoken commands and they run through the central pipeline:
 
 ```json
 "gesture_actions": { "fist": "pause", "thumbs_up": "volume up" }

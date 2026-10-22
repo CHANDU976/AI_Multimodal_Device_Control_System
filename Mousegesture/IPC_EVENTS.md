@@ -16,9 +16,14 @@ counted (`events.sink_errors`); it never stops tracking.
 ## Envelope
 
 ```json
-{"type": "gesture_fired", "timestamp": 1790000000.123, "source": "gesture",
+{"type": "gesture_fired", "module": "gesture", "timestamp": 1790000000.123,
  "version": 1, "payload": {}}
 ```
+
+The envelope is shared with the speech module and defined in
+[`docs/ipc-protocol.md`](../docs/ipc-protocol.md). `ready`, `fatal`,
+`heartbeat` and `pong` are shared types: their payload keys are the same
+in every module.
 
 * `timestamp` — Unix seconds (`time.time()`), rounded to milliseconds.
 * Every payload key is always present; unknown values are `null`.
@@ -29,7 +34,7 @@ counted (`events.sink_errors`); it never stops tracking.
 
 | type | payload | emitted from |
 |---|---|---|
-| `ready` | `status`, `module`, `camera_index`, `semantic`, `cursor_control` | `_run`: first fresh camera frame after each `start()` |
+| `ready` | `status`, `camera_index`, `semantic`, `cursor_control` | `_run`: first fresh camera frame after each `start()` |
 | `pointing_started` | `hand`, `hand_present`, `cursor_control_active`, `cursor_control` | `_run`: the cursor gate (`_cursor_gate_open`) turns true while a hand is tracked |
 | `pointing_stopped` | `reason`, `hand`, `hand_present`, `cursor_control_active`, `cursor_control` | gate turns false, hand lost, camera stall, `stop()`, fatal, `close()` |
 | `gesture_fired` | `gesture`, `from_gesture`, `trigger`, `hand`, `action`, `confidence`, `rule_id`, `rule_name`, `stream`, `executed` | each `ActionEvent` the geometric or semantic `GestureFSM` fires, at its `actions.dispatch()` call |
@@ -37,6 +42,7 @@ counted (`events.sink_errors`); it never stops tracking.
 | `drag_stopped` | `reason`, `gesture`, `hand`, `button`, `rule_id`, `rule_name`, `duration_sec` | `ActionDispatcher.dragging` goes true→false (any release path) |
 | `fatal` | `code`, `message` (one line, ≤200 chars) | `_run`'s outer `except`: the tracking loop crashed |
 | `heartbeat` | `status`, `pointing`, `dragging`, `hand_present`, `camera`, `semantic`, `fps` | `_run`, at most once per second while ready |
+| `pong` | (empty) | reply to the parent's `{"op": "ping"}`, once the module runs as a child process |
 
 Values:
 

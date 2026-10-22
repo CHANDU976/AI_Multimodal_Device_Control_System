@@ -8,9 +8,11 @@ one queue, and routes every final utterance through:
     custom-command expansion → pending-confirmation check → dictation mode
     → IntentEngine → ActionExecutor → BehaviorModel recording
 
-Gestures reported by the gesture app (if it speaks the JSON protocol) are
-mapped through preferences "gesture_actions" into the same pipeline, so a
-fist can mean "pause" without the gesture app knowing what pause does.
+Both children speak one protocol (docs/ipc-protocol.md): every message is
+{"type", "module", "timestamp", "version", "payload"}. Gestures reported by
+the gesture app ("gesture_fired") are mapped through preferences
+"gesture_actions" into the same pipeline, so a fist can mean "pause" without
+the gesture app knowing what pause does.
 
 State the manager holds deliberately, not the children:
   * dictation mode   — while ON, utterances are typed, not parsed
@@ -34,6 +36,11 @@ from central_module.nlp.normalize import normalize
 from central_module.supervisor import ChildSpec, ProcessSupervisor
 
 logger = logging.getLogger(__name__)
+
+# Gesture-module state changes (docs/ipc-protocol.md). Fusion will read them.
+GESTURE_STATE_EVENTS = frozenset({
+    "pointing_started", "pointing_stopped", "drag_started", "drag_stopped",
+})
 
 
 class CentralManager:
@@ -145,16 +152,32 @@ class CentralManager:
 
     def _dispatch(self, child: str, msg: dict) -> None:
         kind = msg.get("type")
+        if not kind:                    # a blank line parses to {}
+            return
+        # Children wrap their data in the shared envelope; the supervisor's
+        # own "lifecycle" and "log" messages are flat and carry none.
+        payload = msg.get("payload")
+        if not isinstance(payload, dict):
+            payload = {}
+        version = msg.get("version")
+        if version is not None and version != config.IPC_PROTOCOL_VERSION:
+            logger.warning("%s speaks protocol version %r; expected %r",
+                           child, version, config.IPC_PROTOCOL_VERSION)
+
         if kind in ("command", "dictation"):
-            text = (msg.get("text") or "").strip()
+            text = (payload.get("text") or "").strip()
             if text:
                 self._say(f"heard: {text!r}")
                 self.handle_text(text, origin=child)
         elif kind == "partial":
             if self._verbose:
-                print(f"  ? {msg.get('text', '')}", flush=True)
-        elif kind == "gesture":
-            self._handle_gesture(msg)
+                print(f"  ? {payload.get('text') or ''}", flush=True)
+        elif kind == "gesture_fired":
+            self._handle_gesture(payload)
+        elif kind in GESTURE_STATE_EVENTS:
+            # Pointing and drag state: evidence for speech-gesture fusion,
+            # which is not built yet. Accepted, not acted on.
+            logger.debug("[%s] %s %s", child, kind, payload)
         elif kind == "ready":
             self._say(f"{child} module ready")
         elif kind == "lifecycle":
@@ -162,16 +185,19 @@ class CentralManager:
             if state in ("exited", "restarting", "gave_up"):
                 self._say(f"{child} {state} {msg.get('returncode', '')}".rstrip())
         elif kind == "fatal":
-            self._say(f"{child} failed: {msg.get('error')}")
+            reason = payload.get("message") or payload.get("code")
+            self._say(f"{child} failed: {reason}")
         elif kind == "device":
-            logger.info("audio device change: %s", msg.get("metadata"))
+            logger.info("audio device change: %s", payload.get("metadata"))
         elif kind == "error":
-            logger.warning("%s error: %s", child, msg.get("metadata"))
-        elif kind in ("log", "pong", "devices"):
+            logger.warning("%s error: %s", child, payload.get("metadata"))
+        elif kind in ("log", "pong", "devices", "heartbeat"):
             logger.debug("[%s] %s", child, msg)
+        else:
+            logger.warning("[%s] unhandled message type %r", child, kind)
 
-    def _handle_gesture(self, msg: dict) -> None:
-        name = msg.get("name", "")
+    def _handle_gesture(self, payload: dict) -> None:
+        name = payload.get("gesture") or ""
         mapped = (self.prefs.get("gesture_actions") or {}).get(name)
         if mapped:
             self._say(f"gesture {name!r} → {mapped!r}")

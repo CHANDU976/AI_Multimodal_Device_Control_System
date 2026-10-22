@@ -28,8 +28,12 @@ SPEECH_CHILD = {
 # The gesture module is an independent app with its own UI. Point "command"
 # at it (e.g. ["C:/path/to/venv/python.exe", "C:/path/to/gesture_app/main.py"])
 # via preferences.json → gesture.command, or leave it on the bundled stub.
-# If it prints JSON lines ({"type": "gesture", "name": ...}) on stdout the
-# central module will route them; any other output is just logged.
+# If it prints protocol lines on stdout (docs/ipc-protocol.md, e.g. a
+# "gesture_fired" event) the central module routes them; any other output is
+# just logged.
+# Version of the child protocol (docs/ipc-protocol.md) this module reads.
+IPC_PROTOCOL_VERSION = 1
+
 GESTURE_CHILD = {
     "enabled": False,
     "argv": [sys.executable, "-u", "-m", "central_module.runners.gesture_runner"],

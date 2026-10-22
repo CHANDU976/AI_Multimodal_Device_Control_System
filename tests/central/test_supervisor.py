@@ -51,9 +51,13 @@ class Events:
 
 
 def has(kind, **fields):
+    """A message of this type whose fields match, top level or in the payload."""
+    def matches(m):
+        body = {**m, **(m.get("payload") or {})}
+        return m.get("type") == kind and all(body.get(k) == v for k, v in fields.items())
+
     def pred(items):
-        return any(m.get("type") == kind and all(m.get(k) == v for k, v in fields.items())
-                   for _, m in items)
+        return any(matches(m) for _, m in items)
     return pred
 
 
@@ -82,7 +86,7 @@ def test_child_lifecycle_and_control_channel(supervisor):
     assert supervisor.send("gesture", {"op": "ping"})
     ev.wait_for(has("pong"))
     supervisor.send("gesture", {"op": "emit", "name": "fist", "confidence": 0.9})
-    ev.wait_for(has("gesture", name="fist"))
+    ev.wait_for(has("gesture_fired", gesture="fist"))
 
     supervisor.stop_all()
     assert not supervisor.child_alive("gesture")

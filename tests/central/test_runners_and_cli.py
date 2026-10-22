@@ -47,16 +47,17 @@ def test_gesture_stub_protocol():
         json.dumps({"op": "ping"}) + "\n"                 # after shutdown: ignored
     proc = run_py(GESTURE, ops)
     assert proc.returncode == 0, proc.stderr
-    assert json_lines(proc.stdout) == [
-        {"type": "ready"}, {"type": "pong"},
-        {"type": "gesture", "name": "fist", "confidence": 0.5},
-    ]
+    events = json_lines(proc.stdout)
+    assert [(e["type"], e["module"], e["version"]) for e in events] == [
+        ("ready", "gesture", 1), ("pong", "gesture", 1), ("gesture_fired", "gesture", 1)]
+    fired = events[2]["payload"]
+    assert (fired["gesture"], fired["confidence"], fired["executed"]) == ("fist", 0.5, False)
 
 
 def test_gesture_stub_exits_when_parent_disappears():
     proc = run_py(GESTURE, stdin="")                     # immediate EOF
     assert proc.returncode == 0
-    assert json_lines(proc.stdout) == [{"type": "ready"}]
+    assert [e["type"] for e in json_lines(proc.stdout)] == ["ready"]
 
 
 # ── speech_runner with a stand-in SpeechManager ────────────────────────────────
@@ -71,9 +72,12 @@ FAKE_SPEECH = textwrap.dedent("""
                 event_type, text, source, metadata
 
         def to_ipc(self):                # the real shape is unit-tested in tests/speech
-            return {"type": self.event_type, "text": self.text, "source": self.source,
-                    "timestamp": 1700000000.123, "model": "vosk-model-small-en-in-0.4",
-                    "confidence": 0.97, "metadata": self.metadata}
+            return {"type": self.event_type, "module": "speech",
+                    "timestamp": 1700000000.123, "version": 1,
+                    "payload": {"text": self.text, "source": self.source,
+                                "model": "vosk-model-small-en-in-0.4",
+                                "confidence": 0.97, "segment_start": 1699999999.2,
+                                "metadata": self.metadata}}
 
     class SpeechManager:
         def __init__(self, callback):
@@ -116,15 +120,24 @@ def test_speech_runner_protocol():
     proc = speech("ok", stdin)
     assert proc.returncode == 0, proc.stderr
     events = json_lines(proc.stdout)                    # also proves stdout hygiene
-    assert events[0] == {"type": "command", "text": "open chrome", "source": "vosk",
-                         "timestamp": 1700000000.123, "model": "vosk-model-small-en-in-0.4",
-                         "confidence": 0.97, "metadata": {"conf": 0.97}}   # to_ipc(), verbatim
-    assert events[1] == {"type": "ready"}
-    assert events[2] == {"type": "pong"}
-    error = events[3]
-    assert error["type"] == "error" and error["metadata"]["op"] == "set_language"
+    assert events[0] == {"type": "command", "module": "speech",       # to_ipc(), verbatim
+                         "timestamp": 1700000000.123, "version": 1,
+                         "payload": {"text": "open chrome", "source": "vosk",
+                                     "model": "vosk-model-small-en-in-0.4",
+                                     "confidence": 0.97, "segment_start": 1699999999.2,
+                                     "metadata": {"conf": 0.97}}}
+    # Messages the runner builds itself use the same envelope.
+    for event in events[1:]:
+        assert set(event) == {"type", "module", "timestamp", "version", "payload"}
+        assert (event["module"], event["version"]) == ("speech", 1)
+    assert [e["type"] for e in events[1:]] == ["ready", "pong", "error", "devices"]
+    assert events[1]["payload"] == {"status": "ready"}
+    assert events[2]["payload"] == {}
+    error = events[3]["payload"]
+    assert error["source"] == "runner" and error["metadata"]["op"] == "set_language"
+    assert error["segment_start"] is None
     assert "Unknown language" in error["metadata"]["error"]
-    assert events[4] == {"type": "devices", "devices": [{"index": 1, "name": "USB Mic"}]}
+    assert events[4]["payload"] == {"devices": [{"index": 1, "name": "USB Mic"}]}
     assert len(events) == 5
     assert "stray print from a native library" in proc.stderr
     for marker in ("LANG=hi-in", "DEVICE=2", "bad control line", "unknown op", "STOPPED"):
@@ -141,14 +154,18 @@ def test_speech_runner_reports_import_failure():
     proc = speech("import-fails", stdin="")
     assert proc.returncode == 1
     fatal = json_lines(proc.stdout)
-    assert fatal[0]["type"] == "fatal" and "speech import failed" in fatal[0]["error"]
+    assert fatal[0]["type"] == "fatal" and fatal[0]["module"] == "speech"
+    assert fatal[0]["payload"]["code"] == "import_failed"
+    assert "speech import failed" in fatal[0]["payload"]["message"]
 
 
 def test_speech_runner_reports_start_failure():
     proc = speech("start-fails", stdin="")
     assert proc.returncode == 1
     fatal = json_lines(proc.stdout)[-1]
-    assert fatal == {"type": "fatal", "error": "start failed: no microphone"}
+    assert fatal["type"] == "fatal"
+    assert fatal["payload"] == {"code": "start_failed",
+                                "message": "start failed: no microphone"}
 
 
 # ── python -m central_module ───────────────────────────────────────────────────

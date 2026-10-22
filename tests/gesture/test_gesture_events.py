@@ -125,6 +125,7 @@ ALL_CONSTRUCTED = [
     lambda: ge.ready(camera_index=0, semantic="loading"),
     lambda: ge.fatal(code=ge.FATAL_TRACKING_LOOP, message="boom"),
     lambda: ge.heartbeat(pointing=False, dragging=False),
+    lambda: ge.pong(),
 ]
 
 
@@ -137,9 +138,9 @@ class EnvelopeTests(unittest.TestCase):
             text = json.dumps(message, allow_nan=False)    # strict JSON
             self.assertEqual(json.loads(text), message)
             self.assertEqual(set(message),
-                             {"type", "timestamp", "source", "version",
+                             {"type", "module", "timestamp", "version",
                               "payload"})
-            self.assertEqual(message["source"], "gesture")
+            self.assertEqual(message["module"], "gesture")
             self.assertEqual(message["version"], ge.PROTOCOL_VERSION)
             self.assertIsInstance(message["payload"], dict)
             seen.add(message["type"])
@@ -162,7 +163,7 @@ class EnvelopeTests(unittest.TestCase):
         self.assertEqual(set(ge.fatal(code="c")["payload"]),
                          {"code", "message"})
         self.assertEqual(ge.ready()["payload"]["status"], "ready")
-        self.assertEqual(ge.ready()["payload"]["module"], "mousegesture")
+        self.assertNotIn("module", ge.ready()["payload"])   # the envelope says it
 
     def test_missing_optionals_are_null_not_absent(self):
         payload = ge.gesture_fired(gesture="g", action=None)["payload"]

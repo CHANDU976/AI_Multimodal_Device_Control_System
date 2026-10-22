@@ -247,33 +247,40 @@ def test_stray_confirm_is_harmless(mgr, capsys):
 
 # ── Child events ───────────────────────────────────────────────────────────────
 
+def envelope(kind, module="speech", version=1, **payload):
+    """A child message in the shared protocol (docs/ipc-protocol.md)."""
+    return {"type": kind, "module": module, "timestamp": 1790000000.0,
+            "version": version, "payload": payload}
+
+
 def test_command_event_runs_the_pipeline(mgr, capsys):
-    mgr._dispatch("speech", {"type": "command", "text": " open chrome "})
+    mgr._dispatch("speech", envelope("command", text=" open chrome "))
     assert mgr.adapter.calls == [("open_app", "chrome-cmd")]
     assert said(capsys)[0] == "heard: 'open chrome'"
 
 
 def test_dictation_event_runs_the_pipeline(mgr):
-    mgr._dispatch("speech", {"type": "dictation", "text": "type hello world"})
+    mgr._dispatch("speech", envelope("dictation", text="type hello world"))
     assert mgr.adapter.calls == [("type_text", "hello world")]
 
 
 def test_mapped_gesture_runs_its_command(mgr, capsys):
     mgr.prefs.set("gesture_actions", {"fist": "pause"})
-    mgr._dispatch("gesture", {"type": "gesture", "name": "fist"})
+    mgr._dispatch("gesture", envelope("gesture_fired", "gesture", gesture="fist"))
     assert mgr.adapter.calls == [("media", "play_pause")]
 
 
 def test_unmapped_gesture_does_nothing(mgr, capsys):
-    mgr._dispatch("gesture", {"type": "gesture", "name": "wave"})
+    mgr._dispatch("gesture", envelope("gesture_fired", "gesture", gesture="wave"))
     assert mgr.adapter.calls == [] and said(capsys) == []
 
 
 @pytest.mark.parametrize("msg, expected", [
-    ({"type": "ready"}, "speech module ready"),
+    (envelope("ready", status="ready"), "speech module ready"),
     ({"type": "lifecycle", "state": "exited", "returncode": 1}, "speech exited 1"),
     ({"type": "lifecycle", "state": "gave_up"}, "speech gave_up"),
-    ({"type": "fatal", "error": "no mic"}, "speech failed: no mic"),
+    (envelope("fatal", code="start_failed", message="no mic"), "speech failed: no mic"),
+    (envelope("fatal", code="start_failed", message=None), "speech failed: start_failed"),
 ])
 def test_status_events_are_announced(mgr, capsys, msg, expected):
     mgr._dispatch("speech", msg)
@@ -281,18 +288,35 @@ def test_status_events_are_announced(mgr, capsys, msg, expected):
 
 
 @pytest.mark.parametrize("msg", [
-    {"type": "lifecycle", "state": "started"}, {"type": "partial", "text": "op"},
-    {"type": "device", "metadata": {}}, {"type": "error", "metadata": {}},
-    {"type": "pong"}, {"type": "log", "line": "x"}, {"type": "mystery"}, {},
+    {"type": "lifecycle", "state": "started"}, envelope("partial", text="op"),
+    envelope("device", metadata={}), envelope("error", metadata={}),
+    envelope("pong"), {"type": "log", "line": "x"}, {},
+    envelope("heartbeat", "gesture", status="running"),
+    envelope("pointing_started", "gesture", hand="right"),
+    envelope("pointing_stopped", "gesture", reason="hand_lost"),
+    envelope("drag_started", "gesture"), envelope("drag_stopped", "gesture"),
 ])
-def test_quiet_events(mgr, capsys, msg):
+def test_quiet_events(mgr, capsys, caplog, msg):
     mgr._dispatch("speech", msg)
     assert said(capsys) == [] and mgr.adapter.calls == []
+    assert "unhandled message type" not in caplog.text
+
+
+def test_an_unknown_message_type_is_logged_not_acted_on(mgr, capsys, caplog):
+    mgr._dispatch("speech", envelope("mystery"))
+    assert said(capsys) == [] and mgr.adapter.calls == []
+    assert "unhandled message type 'mystery'" in caplog.text
+
+
+def test_an_unexpected_protocol_version_is_reported(mgr, caplog):
+    mgr._dispatch("speech", envelope("command", version=2, text="open chrome"))
+    assert "protocol version 2" in caplog.text
+    assert mgr.adapter.calls == [("open_app", "chrome-cmd")]     # still read
 
 
 def test_partials_shown_in_verbose_mode(make_manager, capsys):
     mgr = make_manager(verbose=True)
-    mgr._dispatch("speech", {"type": "partial", "text": "open chr"})
+    mgr._dispatch("speech", envelope("partial", text="open chr"))
     assert "? open chr" in capsys.readouterr().out
 
 
