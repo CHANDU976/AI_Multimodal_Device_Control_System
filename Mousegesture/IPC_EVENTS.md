@@ -127,7 +127,7 @@ gesture module absent.
 ## Tests
 
 ```
-python test_gesture_events.py
+python -m pytest tests/gesture/test_gesture_events.py    # from the project root
 ```
 
 Covers schema, tracker transitions, and the real `_run` loop driven by a
