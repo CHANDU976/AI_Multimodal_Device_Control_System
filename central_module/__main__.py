@@ -1,13 +1,18 @@
 """
 __main__.py — `python -m central_module`
 
-    python -m central_module                 run the full system (mic + children)
+    python -m central_module                 run the full system: speech child
+                                             (microphone) + gesture child
+                                             (Gesture Studio window)
     python -m central_module --simulate      type commands instead of speaking
     python -m central_module --dry-run       log actions instead of executing
     python -m central_module --once "open chrome"
                                              run one command through the pipeline
-    python -m central_module --no-speech     supervisor without the speech child
-    python -m central_module --gesture-stub  also run the bundled gesture stub
+    python -m central_module --no-speech     without the speech child
+    python -m central_module --no-gesture    without the gesture child
+    python -m central_module --gesture-headless
+                                             gesture engine without its window
+    python -m central_module --gesture-stub  the gesture stub instead (no camera)
 """
 
 from __future__ import annotations
@@ -31,8 +36,13 @@ def main() -> int:
                         help="process one utterance, then exit")
     parser.add_argument("--no-speech", action="store_true",
                         help="do not start the speech child")
+    parser.add_argument("--no-gesture", action="store_true",
+                        help="do not start the gesture child")
+    parser.add_argument("--gesture-headless", action="store_true",
+                        help="run the gesture engine without its window "
+                             "(camera from preferences gesture.camera)")
     parser.add_argument("--gesture-stub", action="store_true",
-                        help="run the bundled gesture stub child")
+                        help="run the bundled gesture stub child (no camera)")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="debug logging + live speech partials")
     args = parser.parse_args()
@@ -48,6 +58,8 @@ def main() -> int:
         verbose=args.verbose,
         enable_speech=not args.no_speech,
         force_gesture_stub=args.gesture_stub,
+        enable_gesture=not args.no_gesture,
+        gesture_mode="headless" if args.gesture_headless else None,
     )
 
     if args.once:

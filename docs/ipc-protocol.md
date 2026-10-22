@@ -1,7 +1,8 @@
 # Child-process IPC protocol (version 1)
 
 The speech and gesture modules run as child processes of the central
-module and talk to it in one protocol. This file is the contract. Module
+module (`central_module/runners/speech_runner.py` and `gesture_runner.py`)
+and talk to it in one protocol. This file is the contract. Module
 documents describe what each payload means:
 
 - speech: `central_module/runners/speech_runner.py` and `SpeechEvent.to_ipc()` in `speech_module/speech_manager.py`
@@ -86,7 +87,9 @@ Speech `fatal` codes: `import_failed`, `start_failed`.
 `pointing_started`, `pointing_stopped`, `gesture_fired`, `drag_started`,
 `drag_stopped`. Payloads are listed in `Mousegesture/IPC_EVENTS.md`.
 
-Gesture `fatal` codes: `tracking_loop_failed`.
+Gesture `fatal` codes: `tracking_loop_failed` (sent by the engine),
+`start_failed` and `camera_failed` (sent by `gesture_runner` when the module
+cannot load, or a headless camera will not open).
 
 ### Rules for new types
 

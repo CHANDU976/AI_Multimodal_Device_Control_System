@@ -16,7 +16,7 @@ from central_module.supervisor import ChildProcess, ChildSpec, ProcessSupervisor
 
 pytestmark = pytest.mark.slow
 
-STUB = [sys.executable, "-u", "-m", "central_module.runners.gesture_runner"]
+STUB = [sys.executable, "-u", "-m", "central_module.runners.gesture_stub"]
 
 
 class Events:
@@ -114,6 +114,26 @@ def test_crashing_child_is_restarted_with_backoff_then_abandoned(supervisor):
     assert all(m["returncode"] == 3 for m in exits)
     attempts = [m["attempt"] for _, m in ev.items if m.get("state") == "restarting"]
     assert attempts == [1, 2]
+
+
+def test_clean_exit_can_mean_stay_down(supervisor):
+    # A window the user closed exits 0: not a crash, so it is not reopened.
+    supervisor.add(ChildSpec("window", [sys.executable, "-c", "pass"],
+                             restart_on_clean_exit=False, backoff_base_s=0.05))
+    supervisor.start_all()
+    supervisor.events.wait_for(has("lifecycle", state="exited"))
+    time.sleep(0.3)
+    assert "restarting" not in supervisor.events.states()
+    assert supervisor.child_alive("window") is False
+
+
+def test_crash_is_restarted_even_when_clean_exits_stay_down(supervisor):
+    supervisor.add(ChildSpec("window", [sys.executable, "-c", "import sys; sys.exit(2)"],
+                             restart_on_clean_exit=False, max_restarts=1,
+                             backoff_base_s=0.05, backoff_cap_s=0.1))
+    supervisor.start_all()
+    supervisor.events.wait_for(has("lifecycle", state="gave_up"))
+    assert supervisor.events.states("window").count("restarting") == 1
 
 
 def test_restart_disabled_child_is_just_reported(supervisor):

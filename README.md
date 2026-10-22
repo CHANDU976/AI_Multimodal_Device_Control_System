@@ -269,11 +269,13 @@ or `Models/DFN3` is empty.
 Run everything through the venv interpreter (`.venv\Scripts\python.exe` on Windows,
 `.venv/bin/python` elsewhere).
 
-**Full system** — mic + both child processes:
+**Full system** — the speech child (microphone) and the gesture child (the
+Gesture Studio window; connect a camera there to start tracking):
 
 ```bash
 python -m central_module
 python -m central_module --verbose        # debug logging + live speech partials
+python -m central_module --gesture-headless   # gesture engine without its window
 ```
 
 **Without hardware, or without actually executing:**
@@ -282,8 +284,9 @@ python -m central_module --verbose        # debug logging + live speech partials
 python -m central_module --simulate       # type commands instead of speaking
 python -m central_module --dry-run        # report actions instead of executing them
 python -m central_module --once "open chrome" --dry-run
-python -m central_module --no-speech      # supervisor without the speech child
-python -m central_module --gesture-stub   # run the bundled gesture stub child
+python -m central_module --no-speech      # without the speech child
+python -m central_module --no-gesture     # without the gesture child
+python -m central_module --gesture-stub   # a stand-in gesture child (no camera)
 ```
 
 **Speech module standalone:**

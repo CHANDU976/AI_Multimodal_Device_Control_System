@@ -331,13 +331,52 @@ def test_event_queue_overflow_drops_instead_of_blocking(mgr, caplog):
 
 def test_default_children(mgr):
     mgr._build_children()
-    assert [s.name for s in mgr.supervisor.specs] == ["speech"]
+    speech, gesture = mgr.supervisor.specs
+    assert (speech.name, gesture.name) == ("speech", "gesture")
+    # Default: the Gesture Studio window, which stays closed if the user
+    # closes it, with time to answer an "unsaved mappings?" prompt.
+    assert gesture.argv == config.GESTURE_CHILD["argv"]
+    assert gesture.restart_on_clean_exit is False
+    assert gesture.grace_s == config.GESTURE_CHILD["gui_grace_s"]
 
 
 def test_no_speech_flag(make_manager):
     mgr = make_manager(enable_speech=False)
     mgr._build_children()
-    assert mgr.supervisor.specs == []
+    assert [s.name for s in mgr.supervisor.specs] == ["gesture"]
+
+
+def test_no_gesture_flag(make_manager):
+    mgr = make_manager(enable_gesture=False)
+    mgr._build_children()
+    assert [s.name for s in mgr.supervisor.specs] == ["speech"]
+
+
+def test_gesture_section_without_enabled_keeps_the_default(mgr):
+    mgr.prefs.set("gesture", {"mode": "gui"})          # hand-edited, "enabled" missing
+    mgr._build_children()
+    assert [s.name for s in mgr.supervisor.specs] == ["speech", "gesture"]
+
+
+def test_gesture_disabled_in_preferences(mgr):
+    mgr.prefs.set("gesture.enabled", False)
+    mgr._build_children()
+    assert [s.name for s in mgr.supervisor.specs] == ["speech"]
+
+
+def test_headless_gesture_uses_the_saved_camera(mgr):
+    mgr.prefs.set("gesture.mode", "headless")
+    mgr.prefs.set("gesture.camera", 2)
+    mgr._build_children()
+    gesture = mgr.supervisor.specs[1]
+    assert gesture.argv == [*config.GESTURE_CHILD["argv"], "--headless", "--camera", "2"]
+    assert gesture.restart_on_clean_exit is True        # no window to close
+
+
+def test_headless_flag_overrides_the_preference(make_manager):
+    mgr = make_manager(gesture_mode="headless")
+    mgr._build_children()
+    assert "--headless" in mgr.supervisor.specs[1].argv
 
 
 def test_configured_gesture_app_is_supervised(mgr):
@@ -350,7 +389,50 @@ def test_configured_gesture_app_is_supervised(mgr):
 def test_gesture_stub_when_forced(make_manager):
     mgr = make_manager(force_gesture_stub=True)
     mgr._build_children()
-    assert mgr.supervisor.specs[1].argv == config.GESTURE_CHILD["argv"]
+    assert mgr.supervisor.specs[1].argv == config.GESTURE_STUB["argv"]
+
+
+def gesture_msg(kind, **payload):
+    return {"type": kind, "module": "gesture", "timestamp": 1790000000.5,
+            "version": 1, "payload": payload}
+
+
+def test_gesture_state_follows_the_gesture_child(mgr, capsys):
+    assert mgr.gesture_state["ready"] is False
+    mgr._dispatch("gesture", gesture_msg("ready", status="ready", camera_index=1))
+    assert said(capsys) == ["gesture module ready (camera 1)"]
+    mgr._dispatch("gesture", gesture_msg("pointing_started", hand="right"))
+    mgr._dispatch("gesture", gesture_msg("drag_started"))
+    state = mgr.gesture_state
+    assert (state["ready"], state["camera_index"], state["pointing"], state["dragging"]) == \
+        (True, 1, True, True)
+    assert state["last_seen"] == 1790000000.5
+    mgr._dispatch("gesture", gesture_msg("drag_stopped", reason="gesture"))
+    mgr._dispatch("gesture", gesture_msg("pointing_stopped", reason="hand_lost"))
+    assert (mgr.gesture_state["pointing"], mgr.gesture_state["dragging"]) == (False, False)
+
+
+def test_heartbeat_corrects_the_gesture_state(mgr):
+    # A missed transition is repaired by the next heartbeat.
+    mgr._dispatch("gesture", gesture_msg("heartbeat", status="running",
+                                         pointing=True, dragging=False))
+    assert mgr.gesture_state["pointing"] is True and mgr.gesture_state["ready"] is True
+
+
+@pytest.mark.parametrize("msg", [
+    gesture_msg("fatal", code="tracking_loop_failed", message="boom"),
+    {"type": "lifecycle", "child": "gesture", "state": "exited", "returncode": 0},
+])
+def test_gesture_state_resets_when_the_child_stops(mgr, msg):
+    mgr._dispatch("gesture", gesture_msg("pointing_started"))
+    mgr._dispatch("gesture", msg)
+    assert mgr.gesture_state["pointing"] is False and mgr.gesture_state["ready"] is False
+
+
+def test_speech_events_leave_the_gesture_state_alone(mgr):
+    mgr._dispatch("speech", {"type": "ready", "module": "speech", "timestamp": 1.0,
+                             "version": 1, "payload": {"status": "ready"}})
+    assert mgr.gesture_state["ready"] is False
 
 
 def test_start_restores_saved_language(mgr):

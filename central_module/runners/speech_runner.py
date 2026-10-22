@@ -28,7 +28,9 @@ protocol" that speech_manager.py's docstrings anticipate.
 
 Protocol hygiene: fd 1 is duplicated for the protocol and then redirected to
 stderr, so stray prints — ours or a native library's — land in the log stream
-instead of corrupting the event stream. EOF on stdin means the parent died;
+instead of corrupting the event stream. Control ops are read from a private
+copy of stdin, and stdin itself is pointed at NUL (see the comment below).
+EOF on the control pipe means the parent died;
 the runner shuts down rather than run an orphaned microphone.
 """
 
@@ -45,6 +47,21 @@ import time
 _proto = os.fdopen(os.dup(1), "w", buffering=1, encoding="utf-8", newline="\n")
 os.dup2(2, 1)                  # fd 1 now feeds the parent's log pump
 sys.stdout = sys.stderr
+
+# ── Control channel: a private copy of stdin, and stdin itself → NUL ───────────
+# The control thread blocks reading this pipe. On Windows, while a blocking
+# read is pending on a pipe, every other use of that same pipe waits for it —
+# including the start-up code of native libraries (numpy's DLLs query the
+# standard input handle as they load) and of any child process we start,
+# which inherits stdin. The parent rarely writes to us, so those waits never
+# ended: the camera scan froze importing numpy, and audio device queries
+# timed out. Reading a duplicate and pointing the real stdin at NUL keeps the
+# pipe to ourselves. EOF on the duplicate still means the parent died.
+_control = os.fdopen(os.dup(0), "r", encoding="utf-8")
+_nul = os.open(os.devnull, os.O_RDONLY)
+os.dup2(_nul, 0)               # also replaces the Windows standard input handle
+os.close(_nul)
+sys.stdin = open(os.devnull, encoding="utf-8")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -121,7 +138,7 @@ def main() -> int:
 
     def control_loop() -> None:
         """stdin ops; EOF (parent died or closed us) → shutdown."""
-        for line in sys.stdin:
+        for line in _control:
             line = line.strip()
             if not line:
                 continue

@@ -113,7 +113,8 @@ def test_every_side_agrees_on_the_version_and_names():
             == ge.PROTOCOL_VERSION == central_config.IPC_PROTOCOL_VERSION)
     # The module names are the supervisor's child names, so a message's
     # "module" and the child it arrived from always agree.
-    source = inspect.getsource(manager_mod.CentralManager._build_children)
+    source = (inspect.getsource(manager_mod.CentralManager._build_children)
+              + inspect.getsource(manager_mod.CentralManager._gesture_spec))
     assert 'name="speech"' in source and 'name="gesture"' in source
 
 
@@ -167,6 +168,7 @@ def recording_manager():
         _say=lambda text: calls.append(("say", text)),
         handle_text=lambda text, origin="speech": calls.append(("text", text)),
         _handle_gesture=lambda payload: calls.append(("gesture", payload.get("gesture"))),
+        _track_gesture=lambda kind, msg, payload: None,
     )
     return fake, calls
 

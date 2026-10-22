@@ -28,8 +28,10 @@ logger = logging.getLogger(__name__)
 DEFAULTS: dict = {
     "language": "en-in",            # speech module VOSK_MODELS key
     "gesture": {
-        "enabled": False,
-        "command": [],              # argv of the external gesture app
+        "enabled": True,            # run the gesture module as a child
+        "mode": "gui",              # "gui": Gesture Studio window; "headless": engine only
+        "camera": 0,                # camera index for headless mode
+        "command": [],              # argv of a different gesture app, overriding the above
         "cwd": None,
     },
     # Spoken name → command/path, e.g. "my editor": "code". Consulted before

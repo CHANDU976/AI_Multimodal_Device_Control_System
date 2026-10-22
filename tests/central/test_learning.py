@@ -21,7 +21,8 @@ def prefs_path(tmp_path):
 def test_defaults_on_first_run(prefs_path):
     store = PreferenceStore(prefs_path)
     assert store.get("language") == "en-in"
-    assert store.get("gesture.enabled") is False
+    assert store.get("gesture.enabled") is True
+    assert store.get("gesture.mode") == "gui"
     assert store.get("gesture.command") == []
     assert not os.path.exists(prefs_path)          # nothing written until a set()
 
@@ -34,7 +35,7 @@ def test_set_persists_atomically_and_reloads(prefs_path):
     again = PreferenceStore(prefs_path)
     assert again.get("language") == "hi-in"
     assert again.get("gesture.command") == ["python", "app.py"]
-    assert again.get("gesture.enabled") is False     # sibling default survives
+    assert again.get("gesture.enabled") is True      # sibling default survives
 
 
 def test_set_without_persist(prefs_path):
@@ -53,16 +54,16 @@ def test_get_missing_and_through_non_dict(prefs_path):
 
 def test_get_returns_copies(prefs_path):
     store = PreferenceStore(prefs_path)
-    store.get("gesture")["enabled"] = True
-    assert store.get("gesture.enabled") is False
+    store.get("gesture")["enabled"] = False
+    assert store.get("gesture.enabled") is True
 
 
 def test_stored_file_is_merged_over_new_defaults(prefs_path):
     os.makedirs(os.path.dirname(prefs_path))
     with open(prefs_path, "w", encoding="utf-8") as fh:
-        json.dump({"gesture": {"enabled": True}, "custom": 1}, fh)
+        json.dump({"gesture": {"enabled": False}, "custom": 1}, fh)
     store = PreferenceStore(prefs_path)
-    assert store.get("gesture.enabled") is True
+    assert store.get("gesture.enabled") is False
     assert store.get("gesture.command") == []        # filled from DEFAULTS
     assert store.get("custom") == 1
 

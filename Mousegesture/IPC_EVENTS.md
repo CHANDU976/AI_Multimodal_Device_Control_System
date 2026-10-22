@@ -1,17 +1,17 @@
-# Gesture protocol events (IPC-ready, no transport)
+# Gesture protocol events
 
 `gesture_events.py` builds JSON-ready event messages; `hand_cursor_2.py`
-reports state changes into it. **No IPC is implemented.** The integration
-step left for later is one line:
+reports state changes into it. The transport is
+`central_module/runners/gesture_runner.py`: run by the central module, it
+installs the sink and writes each event to stdout as one JSON line. In the
+Gesture Studio window it fills the app's `event_queue` hook; headless it
+passes `HandTrackerEngine(event_sink=...)`.
 
-```python
-engine.events.set_sink(ipc_queue.put_nowait)   # or HandTrackerEngine(event_sink=...)
-```
-
-With no sink installed (the default, and what `app.py` does today) the
-tracker keeps state but builds no messages. The sink is called on the
-camera thread and **must not block**. A sink that raises is caught and
-counted (`events.sink_errors`); it never stops tracking.
+With no sink installed (running `app.py` on its own) the tracker keeps
+state but builds no messages. The sink is called on the camera thread and
+**must not block**; the runner queues events for a separate writer thread.
+A sink that raises is caught and counted (`events.sink_errors`); it never
+stops tracking.
 
 ## Envelope
 
