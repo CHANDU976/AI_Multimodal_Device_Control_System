@@ -25,14 +25,24 @@ SPEECH_CHILD = {
     "grace_s": 10.0,        # SpeechManager.stop() unloads three models
 }
 
-# The gesture module is an independent app with its own UI. Point "command"
-# at it (e.g. ["C:/path/to/venv/python.exe", "C:/path/to/gesture_app/main.py"])
-# via preferences.json → gesture.command, or leave it on the bundled stub.
-# If it prints JSON lines ({"type": "gesture", "name": ...}) on stdout the
-# central module will route them; any other output is just logged.
+# Version of the child protocol (docs/ipc-protocol.md) this module reads.
+IPC_PROTOCOL_VERSION = 1
+
+# The gesture module (Mousegesture/), run through gesture_runner. Whether and
+# how it runs comes from preferences.json → "gesture": enabled, mode ("gui" =
+# the Gesture Studio window, "headless" = engine only) and camera (headless).
+# preferences "gesture.command" can point at a different gesture app instead;
+# anything that prints protocol lines on stdout is routed.
 GESTURE_CHILD = {
-    "enabled": False,
     "argv": [sys.executable, "-u", "-m", "central_module.runners.gesture_runner"],
+    "cwd": PROJECT_ROOT,
+    "grace_s": 8.0,          # headless: close() releases the camera quickly
+    "gui_grace_s": 30.0,     # gui: the window may ask about unsaved mappings
+}
+
+# Stand-in gesture child for tests and `--gesture-stub`: no camera, no window.
+GESTURE_STUB = {
+    "argv": [sys.executable, "-u", "-m", "central_module.runners.gesture_stub"],
     "cwd": PROJECT_ROOT,
     "grace_s": 5.0,
 }

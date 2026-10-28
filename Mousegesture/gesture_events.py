@@ -6,11 +6,15 @@ messages are built.  Every message is a plain dict that the standard
 
     {
       "type": "gesture_fired",
+      "module": "gesture",
       "timestamp": 1790000000.123,     # Unix seconds, millisecond precision
-      "source": "gesture",
       "version": 1,
       "payload": { ... }               # flat, compact, primitives only
     }
+
+The envelope is shared with the speech module and defined in
+docs/ipc-protocol.md; ready, fatal, heartbeat and pong are shared types
+with the same payload keys in every module.
 
 WHAT THIS IS NOT.  A transport.  Nothing here opens a socket, a pipe or
 a queue, writes a file, or prints a message.  GestureEventTracker hands
@@ -41,20 +45,19 @@ import threading
 import time
 
 __all__ = [
-    "PROTOCOL_VERSION", "SOURCE", "MODULE", "EVENT_TYPES",
+    "PROTOCOL_VERSION", "MODULE", "EVENT_TYPES",
     "POINTING_STARTED", "POINTING_STOPPED", "GESTURE_FIRED",
-    "DRAG_STARTED", "DRAG_STOPPED", "READY", "FATAL", "HEARTBEAT",
+    "DRAG_STARTED", "DRAG_STOPPED", "READY", "FATAL", "HEARTBEAT", "PONG",
     "HEARTBEAT_INTERVAL_SEC", "CAMERA_STALL_SEC",
     "build_message", "pointing_started", "pointing_stopped",
     "gesture_fired", "drag_started", "drag_stopped", "ready", "fatal",
-    "heartbeat", "describe_rule", "GestureEventTracker",
+    "heartbeat", "pong", "describe_rule", "GestureEventTracker",
 ]
 
 # ─── Protocol constants ─────────────────────────────────────────────────────
 
 PROTOCOL_VERSION = 1
-SOURCE = "gesture"
-MODULE = "mousegesture"
+MODULE = "gesture"              # the envelope's "module"; the supervisor's child name
 
 POINTING_STARTED = "pointing_started"
 POINTING_STOPPED = "pointing_stopped"
@@ -64,10 +67,11 @@ DRAG_STOPPED = "drag_stopped"
 READY = "ready"
 FATAL = "fatal"
 HEARTBEAT = "heartbeat"
+PONG = "pong"                   # reply to the parent's {"op": "ping"}
 
 EVENT_TYPES = frozenset({
     POINTING_STARTED, POINTING_STOPPED, GESTURE_FIRED, DRAG_STARTED,
-    DRAG_STOPPED, READY, FATAL, HEARTBEAT,
+    DRAG_STOPPED, READY, FATAL, HEARTBEAT, PONG,
 })
 
 # Why pointing or a drag ended.  Stable strings: a consumer may switch on
@@ -170,8 +174,8 @@ def build_message(event_type: str, payload=None, *, timestamp=None) -> dict:
     when = time.time() if timestamp is None else float(timestamp)
     return {
         "type": event_type,
+        "module": MODULE,
         "timestamp": round(when, 3),
-        "source": SOURCE,
         "version": PROTOCOL_VERSION,
         "payload": _plain(dict(payload or {})),
     }
@@ -251,7 +255,6 @@ def ready(*, camera_index=None, semantic=None, cursor_control=None,
           timestamp=None) -> dict:
     return build_message(READY, {
         "status": "ready",
-        "module": MODULE,
         "camera_index": camera_index,
         "semantic": semantic,
         "cursor_control": cursor_control,
@@ -276,6 +279,10 @@ def heartbeat(*, pointing, dragging, hand_present=None, camera=None,
         "semantic": semantic,
         "fps": None if fps is None else round(float(fps), 1),
     }, timestamp=timestamp)
+
+
+def pong(*, timestamp=None) -> dict:
+    return build_message(PONG, {}, timestamp=timestamp)
 
 
 # ─── Rule context ───────────────────────────────────────────────────────────

@@ -3,15 +3,21 @@ speech_runner.py
 Child-process wrapper around speech_module.SpeechManager — the "subprocess
 protocol" that speech_manager.py's docstrings anticipate.
 
-    stdout (JSON lines, child → central):
-        {"type": "ready"}
-        {"type": "partial"|"command"|"dictation"|"device"|"error",
-         "text": ..., "source": ..., "timestamp": ...,
-         "model": ..., "confidence": ...,               both only when known
-         "metadata": {...}}                             SpeechEvent.to_ipc()
-        {"type": "devices", "devices": [...]}          reply to get_devices
-        {"type": "pong"}                               reply to ping
-        {"type": "fatal", "error": ...}                unrecoverable, then exit 1
+    stdout (JSON lines, child → central), each in the envelope shared with
+    the gesture module (docs/ipc-protocol.md):
+
+        {"type": ..., "module": "speech", "timestamp": ..., "version": 1,
+         "payload": {...}}
+
+    type                                   payload
+    ready                                  {"status": "ready"}
+    partial|command|dictation|device|error {"text", "source", "model",
+                                            "confidence", "segment_start",
+                                            "metadata"}
+                                           (SpeechEvent.to_ipc())
+    devices                                {"devices": [...]}  reply to get_devices
+    pong                                   {}                  reply to ping
+    fatal                                  {"code", "message"} unrecoverable, then exit 1
 
     stdin (JSON lines, central → child):
         {"op": "set_language", "lang": "en-in"|"en-us"|"hi-in"}
@@ -22,7 +28,9 @@ protocol" that speech_manager.py's docstrings anticipate.
 
 Protocol hygiene: fd 1 is duplicated for the protocol and then redirected to
 stderr, so stray prints — ours or a native library's — land in the log stream
-instead of corrupting the event stream. EOF on stdin means the parent died;
+instead of corrupting the event stream. Control ops are read from a private
+copy of stdin, and stdin itself is pointed at NUL (see the comment below).
+EOF on the control pipe means the parent died;
 the runner shuts down rather than run an orphaned microphone.
 """
 
@@ -33,11 +41,27 @@ import logging
 import os
 import sys
 import threading
+import time
 
 # ── Protocol channel first, before anything can print ──────────────────────────
 _proto = os.fdopen(os.dup(1), "w", buffering=1, encoding="utf-8", newline="\n")
 os.dup2(2, 1)                  # fd 1 now feeds the parent's log pump
 sys.stdout = sys.stderr
+
+# ── Control channel: a private copy of stdin, and stdin itself → NUL ───────────
+# The control thread blocks reading this pipe. On Windows, while a blocking
+# read is pending on a pipe, every other use of that same pipe waits for it —
+# including the start-up code of native libraries (numpy's DLLs query the
+# standard input handle as they load) and of any child process we start,
+# which inherits stdin. The parent rarely writes to us, so those waits never
+# ended: the camera scan froze importing numpy, and audio device queries
+# timed out. Reading a duplicate and pointing the real stdin at NUL keeps the
+# pipe to ourselves. EOF on the duplicate still means the parent died.
+_control = os.fdopen(os.dup(0), "r", encoding="utf-8")
+_nul = os.open(os.devnull, os.O_RDONLY)
+os.dup2(_nul, 0)               # also replaces the Windows standard input handle
+os.close(_nul)
+sys.stdin = open(os.devnull, encoding="utf-8")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -47,6 +71,28 @@ logging.basicConfig(
 logger = logging.getLogger("speech_runner")
 
 _lock = threading.Lock()
+
+# Must match speech_module/config.py IPC and the gesture module's protocol
+# version; tests/central/test_ipc_protocol.py checks. Defined here because
+# the fatal "speech import failed" message must not depend on importing
+# the speech module.
+MODULE = "speech"
+PROTOCOL_VERSION = 1
+FATAL_MAX_CHARS = 200
+
+
+def message(event_type: str, payload: dict) -> dict:
+    """The shared envelope, for the messages the runner builds itself."""
+    return {"type": event_type, "module": MODULE,
+            "timestamp": round(time.time(), 3),
+            "version": PROTOCOL_VERSION, "payload": payload}
+
+
+def fatal_message(code: str, text: str) -> dict:
+    line = " ".join(str(text).split())
+    if len(line) > FATAL_MAX_CHARS:
+        line = line[:FATAL_MAX_CHARS - 1] + "…"
+    return message("fatal", {"code": code, "message": line})
 
 
 def emit(obj: dict) -> None:
@@ -71,7 +117,7 @@ def main() -> int:
         from speech_manager import SpeechManager, SpeechEvent  # noqa: E402
     except Exception as exc:
         logger.exception("cannot import speech module")
-        emit({"type": "fatal", "error": f"speech import failed: {exc}"})
+        emit(fatal_message("import_failed", f"speech import failed: {exc}"))
         return 1
 
     stop = threading.Event()
@@ -85,14 +131,14 @@ def main() -> int:
         manager.start()
     except Exception as exc:
         logger.exception("SpeechManager failed to start")
-        emit({"type": "fatal", "error": f"start failed: {exc}"})
+        emit(fatal_message("start_failed", f"start failed: {exc}"))
         return 1
 
-    emit({"type": "ready"})
+    emit(message("ready", {"status": "ready"}))
 
     def control_loop() -> None:
         """stdin ops; EOF (parent died or closed us) → shutdown."""
-        for line in sys.stdin:
+        for line in _control:
             line = line.strip()
             if not line:
                 continue
@@ -106,19 +152,21 @@ def main() -> int:
                 if op == "shutdown":
                     break
                 elif op == "ping":
-                    emit({"type": "pong"})
+                    emit(message("pong", {}))
                 elif op == "set_language":
                     manager.set_language(msg["lang"])
                 elif op == "set_input_device":
                     manager.set_input_device(msg.get("index"))
                 elif op == "get_devices":
-                    emit({"type": "devices", "devices": manager.input_devices})
+                    emit(message("devices", {"devices": manager.input_devices}))
                 else:
                     logger.warning("unknown op: %r", op)
             except Exception as exc:
                 logger.exception("control op %r failed", op)
-                emit({"type": "error", "text": "", "source": "runner",
-                      "metadata": {"op": op, "error": str(exc)}})
+                emit(message("error", {
+                    "text": "", "source": "runner", "model": None,
+                    "confidence": None, "segment_start": None,
+                    "metadata": {"op": op, "error": str(exc)}}))
         stop.set()
 
     threading.Thread(target=control_loop, name="ControlLoop", daemon=True).start()

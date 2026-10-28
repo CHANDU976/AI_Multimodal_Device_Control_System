@@ -37,7 +37,9 @@ from gesture_fsm import (DRAG_START, DRAG_STOP, LEFT_CLICK, ActionEvent,
                          ActionExecutor, GestureFSM)
 from hand_cursor_2 import ActionDispatcher, HandTrackerEngine
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+# The gesture package, not this file's folder: the test lives in tests/gesture.
+MODULE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), "Mousegesture")
 
 
 # ─── Shared fakes ───────────────────────────────────────────────────────────
@@ -123,6 +125,7 @@ ALL_CONSTRUCTED = [
     lambda: ge.ready(camera_index=0, semantic="loading"),
     lambda: ge.fatal(code=ge.FATAL_TRACKING_LOOP, message="boom"),
     lambda: ge.heartbeat(pointing=False, dragging=False),
+    lambda: ge.pong(),
 ]
 
 
@@ -135,9 +138,9 @@ class EnvelopeTests(unittest.TestCase):
             text = json.dumps(message, allow_nan=False)    # strict JSON
             self.assertEqual(json.loads(text), message)
             self.assertEqual(set(message),
-                             {"type", "timestamp", "source", "version",
+                             {"type", "module", "timestamp", "version",
                               "payload"})
-            self.assertEqual(message["source"], "gesture")
+            self.assertEqual(message["module"], "gesture")
             self.assertEqual(message["version"], ge.PROTOCOL_VERSION)
             self.assertIsInstance(message["payload"], dict)
             seen.add(message["type"])
@@ -160,7 +163,7 @@ class EnvelopeTests(unittest.TestCase):
         self.assertEqual(set(ge.fatal(code="c")["payload"]),
                          {"code", "message"})
         self.assertEqual(ge.ready()["payload"]["status"], "ready")
-        self.assertEqual(ge.ready()["payload"]["module"], "mousegesture")
+        self.assertNotIn("module", ge.ready()["payload"])   # the envelope says it
 
     def test_missing_optionals_are_null_not_absent(self):
         payload = ge.gesture_fired(gesture="g", action=None)["payload"]
@@ -1047,7 +1050,7 @@ class ScopeTests(unittest.TestCase):
                  "mmap", "pickle", "logging"}
 
     def test_the_builder_has_no_transport_or_io(self):
-        path = os.path.join(HERE, "gesture_events.py")
+        path = os.path.join(MODULE_DIR, "gesture_events.py")
         with open(path, encoding="utf-8") as handle:
             tree = ast.parse(handle.read())
         imported = set()
@@ -1070,10 +1073,10 @@ class ScopeTests(unittest.TestCase):
         self.assertIn("GestureEventTracker(event_sink)", source)
         self.assertIsNone(HandTrackerEngine.events)
 
-    def test_modules_live_beside_this_test(self):
+    def test_modules_load_from_the_gesture_package(self):
         for module in (ge, hand_cursor_2):
             self.assertEqual(os.path.dirname(os.path.abspath(
-                module.__file__)), HERE)
+                module.__file__)), MODULE_DIR)
 
 
 if __name__ == "__main__":

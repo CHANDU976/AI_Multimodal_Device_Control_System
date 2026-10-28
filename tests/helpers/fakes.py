@@ -286,6 +286,22 @@ def cv2_stub_module() -> types.ModuleType:
     mod.setNumThreads = lambda n: None
     mod.VideoCapture = None             # tests that scan cameras install one
     mod.resize = lambda frame, size, interpolation=None: frame
+
+    # Just enough of the image API for the engine's real tracking loop
+    # (tests/gesture/test_gesture_events.py drives it with scripted frames):
+    # numpy versions of the two conversions, and no-op drawing.
+    def _into(result, dst):
+        if dst is None:
+            return result
+        dst[...] = result
+        return dst
+
+    mod.COLOR_BGR2RGB = 4
+    mod.flip = lambda src, code, dst=None: _into(
+        src[:, ::-1] if code == 1 else src[::-1] if code == 0 else src[::-1, ::-1], dst)
+    mod.cvtColor = lambda src, code, dst=None: _into(src[..., ::-1], dst)
+    mod.FILLED, mod.LINE_AA, mod.FONT_HERSHEY_SIMPLEX = -1, 16, 0
+    mod.circle = mod.rectangle = mod.putText = lambda *a, **k: None
     mod.__fake__ = True
     return mod
 

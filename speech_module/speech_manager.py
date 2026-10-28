@@ -125,48 +125,66 @@ class SpeechEvent:
         """
         Build the exact JSON-serialisable object the IPC layer should put on
         the message queue — no further reshaping needed by the caller (see
-        central_module.ipc.send / speech_runner.emit).
+        central_module.ipc.send / speech_runner.emit). The envelope is the
+        one the gesture module uses too: docs/ipc-protocol.md.
 
-        Fields
-        ------
+        Envelope
+        --------
         type        classification — an EVENT_TYPE value (partial / command /
                     dictation / device / error)
+        module      "speech"
+        timestamp   epoch seconds, rounded to ms
+        version     protocol version
+        payload     the fields below, always all present
+
+        Payload
+        -------
         text        recognised or transcribed text
         source      which engine produced it (vosk / whisper / audio / ...)
         model       the specific model behind that engine (e.g.
                     "vosk-model-small-en-in-0.4" or "faster-whisper-small"),
-                    when the event has one
-        timestamp   epoch seconds, rounded to ms
+                    or null when the event has none
         confidence  confidence of the text actually returned — VOSK's mean
                     per-word confidence for a command, or Whisper's own
                     avg_logprob-derived confidence for a dictation (falls
                     back to VOSK's if Whisper couldn't produce one) — never
-                    a stale value from the other engine
+                    a stale value from the other engine; null when unknown
+        segment_start
+                    epoch seconds (ms) at which the utterance began — the
+                    first sample of its VAD segment, pre-roll included.
+                    Word start/end offsets in metadata["words"] are relative
+                    to it, so a word was spoken at segment_start + start.
+                    Set on events decoded from a segment (command,
+                    dictation, a segment's error); null otherwise (partial,
+                    device). Unlike `timestamp`, which is when recognition
+                    finished, this is when the speech happened.
         metadata    everything else: routing reason, timings, words,
                     per-engine model/confidence breakdown, etc.
         """
-        obj: dict = {
-            "type": self.event_type,
-            "text": self.text,
-            "source": self.source,
-            "timestamp": round(self.timestamp, 3),
-        }
-
-        # Whichever engine actually produced `text` wins for the top-level
-        # model/confidence — whisper_* when this event was escalated,
-        # otherwise vosk_*. Both are always kept in metadata regardless.
+        # Whichever engine actually produced `text` wins for model and
+        # confidence — whisper_* when this event was escalated, otherwise
+        # vosk_*. Both are always kept in metadata regardless.
         model = self.metadata.get("whisper_model") or self.metadata.get("vosk_model")
-        if model:
-            obj["model"] = model
-
         confidence = self.metadata.get("whisper_confidence")
         if confidence is None:
             confidence = self.metadata.get("mean_confidence")
-        if confidence is not None:
-            obj["confidence"] = confidence
 
-        obj["metadata"] = self.metadata
-        return obj
+        # The shared envelope (docs/ipc-protocol.md): every payload key is
+        # always present, and an unknown value is null.
+        return {
+            "type": self.event_type,
+            "module": IPC["module"],
+            "timestamp": round(self.timestamp, 3),
+            "version": IPC["protocol_version"],
+            "payload": {
+                "text": self.text,
+                "source": self.source,
+                "model": model or None,
+                "confidence": confidence,
+                "segment_start": self.metadata.get("segment_start"),
+                "metadata": self.metadata,
+            },
+        }
 
 
 # ── Manager ────────────────────────────────────────────────────────────────────

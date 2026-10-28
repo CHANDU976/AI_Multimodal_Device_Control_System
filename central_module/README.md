@@ -53,24 +53,37 @@ asks for a graceful exit before terminate/kill.
 
 `runners/speech_runner.py` wraps `speech_module.SpeechManager` and speaks the
 protocol its docstrings anticipate. Control ops: `set_language`,
-`set_input_device`, `get_devices`, `ping`, `shutdown`. It redirects fd 1 to
+`set_input_device`, `get_devices`, `ping`, `shutdown` (the gesture child
+answers `ping` and `shutdown`). It redirects fd 1 to
 stderr after duplicating it, so a chatty native library can never corrupt the
 event stream.
 
 ### Gesture child
 
-The gesture app is independent and already executes its own mapped actions —
-the central module just owns its lifecycle. Point preferences at it:
+`runners/gesture_runner.py` runs the gesture module (`Mousegesture/`) and
+streams its events on stdout in the shared protocol
+([`docs/ipc-protocol.md`](../docs/ipc-protocol.md)). The gesture module still
+performs its own mapped mouse and keyboard actions; the central module owns
+its lifecycle and listens to its events. Preferences decide how it runs:
 
 ```json
 "gesture": {
   "enabled": true,
-  "command": ["C:/path/to/python.exe", "C:/path/to/gesture_app/main.py"]
+  "mode": "gui",
+  "camera": 0
 }
 ```
 
-Optionally, if it prints `{"type": "gesture", "name": "fist"}` lines on
-stdout, map gestures to spoken commands and they run through the central
+- `"gui"` (default): the Gesture Studio window. Tracking starts when you
+  connect a camera there. Closing the window ends the child and it stays
+  closed; a crash is restarted.
+- `"headless"`: the tracking engine alone on `camera`, using the settings and
+  mappings saved in `gesture_config.json`. Loading takes about half a minute.
+- `"command"`: a list of arguments that runs a different gesture app instead.
+
+The central module keeps `gesture_state` (ready, camera, pointing, dragging)
+from the gesture child's events, for speech–gesture fusion. Gesture names can
+also be mapped to spoken commands, which then run through the central
 pipeline:
 
 ```json

@@ -42,6 +42,9 @@ class ChildSpec:
     cwd: str | None = None
     grace_s: float = 8.0                    # wait after "shutdown" op before terminate()
     restart: bool = True
+    # False: an exit with code 0 is the user's choice (closing a window), not
+    # a crash, so the child stays down. Crashes are still restarted.
+    restart_on_clean_exit: bool = True
     max_restarts: int = SUPERVISOR["max_restarts"]
     backoff_base_s: float = SUPERVISOR["backoff_base_s"]
     backoff_cap_s: float = SUPERVISOR["backoff_cap_s"]
@@ -237,7 +240,8 @@ class ProcessSupervisor:
                 rc = child.returncode
                 self._on_event(name, {"type": "lifecycle", "child": name,
                                       "state": "exited", "returncode": rc})
-                if not (spec.restart and self._running.is_set()):
+                clean_exit_stays_down = rc == 0 and not spec.restart_on_clean_exit
+                if not (spec.restart and self._running.is_set()) or clean_exit_stays_down:
                     with self._lock:
                         self._children.pop(name, None)
                     continue

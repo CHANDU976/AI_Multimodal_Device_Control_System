@@ -1,24 +1,29 @@
-# Gesture protocol events (IPC-ready, no transport)
+# Gesture protocol events
 
 `gesture_events.py` builds JSON-ready event messages; `hand_cursor_2.py`
-reports state changes into it. **No IPC is implemented.** The integration
-step left for later is one line:
+reports state changes into it. The transport is
+`central_module/runners/gesture_runner.py`: run by the central module, it
+installs the sink and writes each event to stdout as one JSON line. In the
+Gesture Studio window it fills the app's `event_queue` hook; headless it
+passes `HandTrackerEngine(event_sink=...)`.
 
-```python
-engine.events.set_sink(ipc_queue.put_nowait)   # or HandTrackerEngine(event_sink=...)
-```
-
-With no sink installed (the default, and what `app.py` does today) the
-tracker keeps state but builds no messages. The sink is called on the
-camera thread and **must not block**. A sink that raises is caught and
-counted (`events.sink_errors`); it never stops tracking.
+With no sink installed (running `app.py` on its own) the tracker keeps
+state but builds no messages. The sink is called on the camera thread and
+**must not block**; the runner queues events for a separate writer thread.
+A sink that raises is caught and counted (`events.sink_errors`); it never
+stops tracking.
 
 ## Envelope
 
 ```json
-{"type": "gesture_fired", "timestamp": 1790000000.123, "source": "gesture",
+{"type": "gesture_fired", "module": "gesture", "timestamp": 1790000000.123,
  "version": 1, "payload": {}}
 ```
+
+The envelope is shared with the speech module and defined in
+[`docs/ipc-protocol.md`](../docs/ipc-protocol.md). `ready`, `fatal`,
+`heartbeat` and `pong` are shared types: their payload keys are the same
+in every module.
 
 * `timestamp` — Unix seconds (`time.time()`), rounded to milliseconds.
 * Every payload key is always present; unknown values are `null`.
@@ -29,7 +34,7 @@ counted (`events.sink_errors`); it never stops tracking.
 
 | type | payload | emitted from |
 |---|---|---|
-| `ready` | `status`, `module`, `camera_index`, `semantic`, `cursor_control` | `_run`: first fresh camera frame after each `start()` |
+| `ready` | `status`, `camera_index`, `semantic`, `cursor_control` | `_run`: first fresh camera frame after each `start()` |
 | `pointing_started` | `hand`, `hand_present`, `cursor_control_active`, `cursor_control` | `_run`: the cursor gate (`_cursor_gate_open`) turns true while a hand is tracked |
 | `pointing_stopped` | `reason`, `hand`, `hand_present`, `cursor_control_active`, `cursor_control` | gate turns false, hand lost, camera stall, `stop()`, fatal, `close()` |
 | `gesture_fired` | `gesture`, `from_gesture`, `trigger`, `hand`, `action`, `confidence`, `rule_id`, `rule_name`, `stream`, `executed` | each `ActionEvent` the geometric or semantic `GestureFSM` fires, at its `actions.dispatch()` call |
@@ -37,6 +42,7 @@ counted (`events.sink_errors`); it never stops tracking.
 | `drag_stopped` | `reason`, `gesture`, `hand`, `button`, `rule_id`, `rule_name`, `duration_sec` | `ActionDispatcher.dragging` goes true→false (any release path) |
 | `fatal` | `code`, `message` (one line, ≤200 chars) | `_run`'s outer `except`: the tracking loop crashed |
 | `heartbeat` | `status`, `pointing`, `dragging`, `hand_present`, `camera`, `semantic`, `fps` | `_run`, at most once per second while ready |
+| `pong` | (empty) | reply to the parent's `{"op": "ping"}`, once the module runs as a child process |
 
 Values:
 
@@ -127,7 +133,7 @@ gesture module absent.
 ## Tests
 
 ```
-python test_gesture_events.py
+python -m pytest tests/gesture/test_gesture_events.py    # from the project root
 ```
 
 Covers schema, tracker transitions, and the real `_run` loop driven by a

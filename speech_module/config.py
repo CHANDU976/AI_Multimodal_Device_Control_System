@@ -545,4 +545,7 @@ CONCURRENCY = {
 IPC = {
     "partial_dedupe": True,             # drop a repeat of this utterance's last partial
     "partial_min_interval_s": 0.15,     # minimum gap between partial IPC messages
+    # Envelope identity, shared with the gesture module (docs/ipc-protocol.md).
+    "module": "speech",
+    "protocol_version": 1,
 }

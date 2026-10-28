@@ -247,33 +247,40 @@ def test_stray_confirm_is_harmless(mgr, capsys):
 
 # ── Child events ───────────────────────────────────────────────────────────────
 
+def envelope(kind, module="speech", version=1, **payload):
+    """A child message in the shared protocol (docs/ipc-protocol.md)."""
+    return {"type": kind, "module": module, "timestamp": 1790000000.0,
+            "version": version, "payload": payload}
+
+
 def test_command_event_runs_the_pipeline(mgr, capsys):
-    mgr._dispatch("speech", {"type": "command", "text": " open chrome "})
+    mgr._dispatch("speech", envelope("command", text=" open chrome "))
     assert mgr.adapter.calls == [("open_app", "chrome-cmd")]
     assert said(capsys)[0] == "heard: 'open chrome'"
 
 
 def test_dictation_event_runs_the_pipeline(mgr):
-    mgr._dispatch("speech", {"type": "dictation", "text": "type hello world"})
+    mgr._dispatch("speech", envelope("dictation", text="type hello world"))
     assert mgr.adapter.calls == [("type_text", "hello world")]
 
 
 def test_mapped_gesture_runs_its_command(mgr, capsys):
     mgr.prefs.set("gesture_actions", {"fist": "pause"})
-    mgr._dispatch("gesture", {"type": "gesture", "name": "fist"})
+    mgr._dispatch("gesture", envelope("gesture_fired", "gesture", gesture="fist"))
     assert mgr.adapter.calls == [("media", "play_pause")]
 
 
 def test_unmapped_gesture_does_nothing(mgr, capsys):
-    mgr._dispatch("gesture", {"type": "gesture", "name": "wave"})
+    mgr._dispatch("gesture", envelope("gesture_fired", "gesture", gesture="wave"))
     assert mgr.adapter.calls == [] and said(capsys) == []
 
 
 @pytest.mark.parametrize("msg, expected", [
-    ({"type": "ready"}, "speech module ready"),
+    (envelope("ready", status="ready"), "speech module ready"),
     ({"type": "lifecycle", "state": "exited", "returncode": 1}, "speech exited 1"),
     ({"type": "lifecycle", "state": "gave_up"}, "speech gave_up"),
-    ({"type": "fatal", "error": "no mic"}, "speech failed: no mic"),
+    (envelope("fatal", code="start_failed", message="no mic"), "speech failed: no mic"),
+    (envelope("fatal", code="start_failed", message=None), "speech failed: start_failed"),
 ])
 def test_status_events_are_announced(mgr, capsys, msg, expected):
     mgr._dispatch("speech", msg)
@@ -281,18 +288,35 @@ def test_status_events_are_announced(mgr, capsys, msg, expected):
 
 
 @pytest.mark.parametrize("msg", [
-    {"type": "lifecycle", "state": "started"}, {"type": "partial", "text": "op"},
-    {"type": "device", "metadata": {}}, {"type": "error", "metadata": {}},
-    {"type": "pong"}, {"type": "log", "line": "x"}, {"type": "mystery"}, {},
+    {"type": "lifecycle", "state": "started"}, envelope("partial", text="op"),
+    envelope("device", metadata={}), envelope("error", metadata={}),
+    envelope("pong"), {"type": "log", "line": "x"}, {},
+    envelope("heartbeat", "gesture", status="running"),
+    envelope("pointing_started", "gesture", hand="right"),
+    envelope("pointing_stopped", "gesture", reason="hand_lost"),
+    envelope("drag_started", "gesture"), envelope("drag_stopped", "gesture"),
 ])
-def test_quiet_events(mgr, capsys, msg):
+def test_quiet_events(mgr, capsys, caplog, msg):
     mgr._dispatch("speech", msg)
     assert said(capsys) == [] and mgr.adapter.calls == []
+    assert "unhandled message type" not in caplog.text
+
+
+def test_an_unknown_message_type_is_logged_not_acted_on(mgr, capsys, caplog):
+    mgr._dispatch("speech", envelope("mystery"))
+    assert said(capsys) == [] and mgr.adapter.calls == []
+    assert "unhandled message type 'mystery'" in caplog.text
+
+
+def test_an_unexpected_protocol_version_is_reported(mgr, caplog):
+    mgr._dispatch("speech", envelope("command", version=2, text="open chrome"))
+    assert "protocol version 2" in caplog.text
+    assert mgr.adapter.calls == [("open_app", "chrome-cmd")]     # still read
 
 
 def test_partials_shown_in_verbose_mode(make_manager, capsys):
     mgr = make_manager(verbose=True)
-    mgr._dispatch("speech", {"type": "partial", "text": "open chr"})
+    mgr._dispatch("speech", envelope("partial", text="open chr"))
     assert "? open chr" in capsys.readouterr().out
 
 
@@ -307,13 +331,52 @@ def test_event_queue_overflow_drops_instead_of_blocking(mgr, caplog):
 
 def test_default_children(mgr):
     mgr._build_children()
-    assert [s.name for s in mgr.supervisor.specs] == ["speech"]
+    speech, gesture = mgr.supervisor.specs
+    assert (speech.name, gesture.name) == ("speech", "gesture")
+    # Default: the Gesture Studio window, which stays closed if the user
+    # closes it, with time to answer an "unsaved mappings?" prompt.
+    assert gesture.argv == config.GESTURE_CHILD["argv"]
+    assert gesture.restart_on_clean_exit is False
+    assert gesture.grace_s == config.GESTURE_CHILD["gui_grace_s"]
 
 
 def test_no_speech_flag(make_manager):
     mgr = make_manager(enable_speech=False)
     mgr._build_children()
-    assert mgr.supervisor.specs == []
+    assert [s.name for s in mgr.supervisor.specs] == ["gesture"]
+
+
+def test_no_gesture_flag(make_manager):
+    mgr = make_manager(enable_gesture=False)
+    mgr._build_children()
+    assert [s.name for s in mgr.supervisor.specs] == ["speech"]
+
+
+def test_gesture_section_without_enabled_keeps_the_default(mgr):
+    mgr.prefs.set("gesture", {"mode": "gui"})          # hand-edited, "enabled" missing
+    mgr._build_children()
+    assert [s.name for s in mgr.supervisor.specs] == ["speech", "gesture"]
+
+
+def test_gesture_disabled_in_preferences(mgr):
+    mgr.prefs.set("gesture.enabled", False)
+    mgr._build_children()
+    assert [s.name for s in mgr.supervisor.specs] == ["speech"]
+
+
+def test_headless_gesture_uses_the_saved_camera(mgr):
+    mgr.prefs.set("gesture.mode", "headless")
+    mgr.prefs.set("gesture.camera", 2)
+    mgr._build_children()
+    gesture = mgr.supervisor.specs[1]
+    assert gesture.argv == [*config.GESTURE_CHILD["argv"], "--headless", "--camera", "2"]
+    assert gesture.restart_on_clean_exit is True        # no window to close
+
+
+def test_headless_flag_overrides_the_preference(make_manager):
+    mgr = make_manager(gesture_mode="headless")
+    mgr._build_children()
+    assert "--headless" in mgr.supervisor.specs[1].argv
 
 
 def test_configured_gesture_app_is_supervised(mgr):
@@ -326,7 +389,50 @@ def test_configured_gesture_app_is_supervised(mgr):
 def test_gesture_stub_when_forced(make_manager):
     mgr = make_manager(force_gesture_stub=True)
     mgr._build_children()
-    assert mgr.supervisor.specs[1].argv == config.GESTURE_CHILD["argv"]
+    assert mgr.supervisor.specs[1].argv == config.GESTURE_STUB["argv"]
+
+
+def gesture_msg(kind, **payload):
+    return {"type": kind, "module": "gesture", "timestamp": 1790000000.5,
+            "version": 1, "payload": payload}
+
+
+def test_gesture_state_follows_the_gesture_child(mgr, capsys):
+    assert mgr.gesture_state["ready"] is False
+    mgr._dispatch("gesture", gesture_msg("ready", status="ready", camera_index=1))
+    assert said(capsys) == ["gesture module ready (camera 1)"]
+    mgr._dispatch("gesture", gesture_msg("pointing_started", hand="right"))
+    mgr._dispatch("gesture", gesture_msg("drag_started"))
+    state = mgr.gesture_state
+    assert (state["ready"], state["camera_index"], state["pointing"], state["dragging"]) == \
+        (True, 1, True, True)
+    assert state["last_seen"] == 1790000000.5
+    mgr._dispatch("gesture", gesture_msg("drag_stopped", reason="gesture"))
+    mgr._dispatch("gesture", gesture_msg("pointing_stopped", reason="hand_lost"))
+    assert (mgr.gesture_state["pointing"], mgr.gesture_state["dragging"]) == (False, False)
+
+
+def test_heartbeat_corrects_the_gesture_state(mgr):
+    # A missed transition is repaired by the next heartbeat.
+    mgr._dispatch("gesture", gesture_msg("heartbeat", status="running",
+                                         pointing=True, dragging=False))
+    assert mgr.gesture_state["pointing"] is True and mgr.gesture_state["ready"] is True
+
+
+@pytest.mark.parametrize("msg", [
+    gesture_msg("fatal", code="tracking_loop_failed", message="boom"),
+    {"type": "lifecycle", "child": "gesture", "state": "exited", "returncode": 0},
+])
+def test_gesture_state_resets_when_the_child_stops(mgr, msg):
+    mgr._dispatch("gesture", gesture_msg("pointing_started"))
+    mgr._dispatch("gesture", msg)
+    assert mgr.gesture_state["pointing"] is False and mgr.gesture_state["ready"] is False
+
+
+def test_speech_events_leave_the_gesture_state_alone(mgr):
+    mgr._dispatch("speech", {"type": "ready", "module": "speech", "timestamp": 1.0,
+                             "version": 1, "payload": {"status": "ready"}})
+    assert mgr.gesture_state["ready"] is False
 
 
 def test_start_restores_saved_language(mgr):

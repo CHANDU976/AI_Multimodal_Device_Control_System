@@ -8,9 +8,11 @@ one queue, and routes every final utterance through:
     custom-command expansion → pending-confirmation check → dictation mode
     → IntentEngine → ActionExecutor → BehaviorModel recording
 
-Gestures reported by the gesture app (if it speaks the JSON protocol) are
-mapped through preferences "gesture_actions" into the same pipeline, so a
-fist can mean "pause" without the gesture app knowing what pause does.
+Both children speak one protocol (docs/ipc-protocol.md): every message is
+{"type", "module", "timestamp", "version", "payload"}. Gestures reported by
+the gesture app ("gesture_fired") are mapped through preferences
+"gesture_actions" into the same pipeline, so a fist can mean "pause" without
+the gesture app knowing what pause does.
 
 State the manager holds deliberately, not the children:
   * dictation mode   — while ON, utterances are typed, not parsed
@@ -35,6 +37,21 @@ from central_module.supervisor import ChildSpec, ProcessSupervisor
 
 logger = logging.getLogger(__name__)
 
+# Gesture-module state changes (docs/ipc-protocol.md). Fusion will read them.
+GESTURE_STATE_EVENTS = frozenset({
+    "pointing_started", "pointing_stopped", "drag_started", "drag_stopped",
+})
+
+
+def _gesture_state_initial() -> dict:
+    """What the central module currently knows about the gesture module.
+
+    Kept from the gesture child's events, so later stages (speech-gesture
+    fusion) can ask "was the user pointing?" without querying the child.
+    """
+    return {"ready": False, "camera_index": None, "pointing": False,
+            "dragging": False, "last_seen": None}
+
 
 class CentralManager:
 
@@ -44,11 +61,16 @@ class CentralManager:
         verbose: bool = False,
         enable_speech: bool = True,
         force_gesture_stub: bool = False,
+        enable_gesture: bool = True,
+        gesture_mode: str | None = None,
     ) -> None:
         self._dry_run = dry_run
         self._verbose = verbose
         self._enable_speech = enable_speech
         self._force_gesture_stub = force_gesture_stub
+        self._enable_gesture = enable_gesture
+        self._gesture_mode = gesture_mode          # overrides preferences when set
+        self.gesture_state = _gesture_state_initial()
 
         self.prefs = PreferenceStore()
         self.behavior = BehaviorModel()
@@ -90,21 +112,41 @@ class CentralManager:
                 grace_s=config.SPEECH_CHILD["grace_s"],
             ))
 
-        # Gesture: the user's configured app wins; the bundled stub only runs
-        # when explicitly forced (it exists to exercise the supervisor path).
-        gesture_cmd = self.prefs.get("gesture.command") or []
-        if self.prefs.get("gesture.enabled") and gesture_cmd:
-            self.supervisor.add(ChildSpec(
-                name="gesture", argv=list(gesture_cmd),
-                cwd=self.prefs.get("gesture.cwd"),
-                grace_s=config.GESTURE_CHILD["grace_s"],
-            ))
-        elif self._force_gesture_stub or config.GESTURE_CHILD["enabled"]:
-            self.supervisor.add(ChildSpec(
-                name="gesture", argv=config.GESTURE_CHILD["argv"],
-                cwd=config.GESTURE_CHILD["cwd"],
-                grace_s=config.GESTURE_CHILD["grace_s"],
-            ))
+        spec = self._gesture_spec()
+        if spec is not None:
+            self.supervisor.add(spec)
+
+    def _gesture_spec(self) -> ChildSpec | None:
+        """The gesture child, from flags and preferences "gesture"."""
+        if self._force_gesture_stub:
+            stub = config.GESTURE_STUB
+            return ChildSpec(name="gesture", argv=list(stub["argv"]),
+                             cwd=stub["cwd"], grace_s=stub["grace_s"])
+        # A gesture section saved without "enabled" keeps the default (on).
+        if not self._enable_gesture or self.prefs.get("gesture.enabled", True) is False:
+            return None
+
+        # A different gesture app the user pointed us at wins.
+        custom = self.prefs.get("gesture.command") or []
+        if custom:
+            return ChildSpec(name="gesture", argv=list(custom),
+                             cwd=self.prefs.get("gesture.cwd"),
+                             grace_s=config.GESTURE_CHILD["grace_s"])
+
+        child = config.GESTURE_CHILD
+        mode = self._gesture_mode or self.prefs.get("gesture.mode") or "gui"
+        if mode == "headless":
+            camera = int(self.prefs.get("gesture.camera") or 0)
+            return ChildSpec(name="gesture",
+                             argv=[*child["argv"], "--headless", "--camera", str(camera)],
+                             cwd=child["cwd"], grace_s=child["grace_s"])
+        if mode != "gui":
+            logger.warning("unknown gesture mode %r, using the window", mode)
+        # Closing the Gesture Studio window is the user's choice: the child
+        # exits 0 and stays closed. A crash is still restarted.
+        return ChildSpec(name="gesture", argv=list(child["argv"]),
+                         cwd=child["cwd"], grace_s=child["gui_grace_s"],
+                         restart_on_clean_exit=False)
 
     # ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -145,33 +187,77 @@ class CentralManager:
 
     def _dispatch(self, child: str, msg: dict) -> None:
         kind = msg.get("type")
+        if not kind:                    # a blank line parses to {}
+            return
+        # Children wrap their data in the shared envelope; the supervisor's
+        # own "lifecycle" and "log" messages are flat and carry none.
+        payload = msg.get("payload")
+        if not isinstance(payload, dict):
+            payload = {}
+        version = msg.get("version")
+        if version is not None and version != config.IPC_PROTOCOL_VERSION:
+            logger.warning("%s speaks protocol version %r; expected %r",
+                           child, version, config.IPC_PROTOCOL_VERSION)
+
+        if child == "gesture":
+            self._track_gesture(kind, msg, payload)
+
         if kind in ("command", "dictation"):
-            text = (msg.get("text") or "").strip()
+            text = (payload.get("text") or "").strip()
             if text:
                 self._say(f"heard: {text!r}")
                 self.handle_text(text, origin=child)
         elif kind == "partial":
             if self._verbose:
-                print(f"  ? {msg.get('text', '')}", flush=True)
-        elif kind == "gesture":
-            self._handle_gesture(msg)
+                print(f"  ? {payload.get('text') or ''}", flush=True)
+        elif kind == "gesture_fired":
+            self._handle_gesture(payload)
+        elif kind in GESTURE_STATE_EVENTS:
+            # Pointing and drag state, kept in gesture_state for fusion.
+            logger.debug("[%s] %s %s", child, kind, payload)
         elif kind == "ready":
-            self._say(f"{child} module ready")
+            camera = payload.get("camera_index")
+            where = f" (camera {camera})" if camera is not None else ""
+            self._say(f"{child} module ready{where}")
         elif kind == "lifecycle":
             state = msg.get("state")
             if state in ("exited", "restarting", "gave_up"):
                 self._say(f"{child} {state} {msg.get('returncode', '')}".rstrip())
         elif kind == "fatal":
-            self._say(f"{child} failed: {msg.get('error')}")
+            reason = payload.get("message") or payload.get("code")
+            self._say(f"{child} failed: {reason}")
         elif kind == "device":
-            logger.info("audio device change: %s", msg.get("metadata"))
+            logger.info("audio device change: %s", payload.get("metadata"))
         elif kind == "error":
-            logger.warning("%s error: %s", child, msg.get("metadata"))
-        elif kind in ("log", "pong", "devices"):
+            logger.warning("%s error: %s", child, payload.get("metadata"))
+        elif kind in ("log", "pong", "devices", "heartbeat"):
             logger.debug("[%s] %s", child, msg)
+        else:
+            logger.warning("[%s] unhandled message type %r", child, kind)
 
-    def _handle_gesture(self, msg: dict) -> None:
-        name = msg.get("name", "")
+    def _track_gesture(self, kind: str, msg: dict, payload: dict) -> None:
+        state = self.gesture_state
+        if msg.get("timestamp") is not None:
+            state["last_seen"] = msg["timestamp"]
+        if kind == "ready":
+            state.update(ready=True, camera_index=payload.get("camera_index"))
+        elif kind == "pointing_started":
+            state["pointing"] = True
+        elif kind == "pointing_stopped":
+            state["pointing"] = False
+        elif kind == "drag_started":
+            state["dragging"] = True
+        elif kind == "drag_stopped":
+            state["dragging"] = False
+        elif kind == "heartbeat":
+            state.update(ready=True, pointing=bool(payload.get("pointing")),
+                         dragging=bool(payload.get("dragging")))
+        elif kind == "fatal" or (kind == "lifecycle"
+                                 and msg.get("state") in ("exited", "gave_up")):
+            self.gesture_state = _gesture_state_initial()
+
+    def _handle_gesture(self, payload: dict) -> None:
+        name = payload.get("gesture") or ""
         mapped = (self.prefs.get("gesture_actions") or {}).get(name)
         if mapped:
             self._say(f"gesture {name!r} → {mapped!r}")

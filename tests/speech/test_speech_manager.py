@@ -355,11 +355,16 @@ def test_command_to_ipc_reports_the_vosk_model_and_confidence(manager):
     (event,) = manager.events
     msg = event.to_ipc()
     assert json.loads(json.dumps(msg)) == msg                  # wire-safe as returned
-    assert {k: msg[k] for k in ("type", "text", "source", "model", "confidence")} == {
-        "type": "command", "text": "open chrome", "source": "vosk",
-        "model": "vosk-model-small-en-in-0.4", "confidence": 0.95}
+    assert {k: msg[k] for k in ("type", "module", "version")} == {
+        "type": "command", "module": "speech", "version": 1}
     assert msg["timestamp"] == round(event.timestamp, 3)
-    assert msg["metadata"] is event.metadata
+    payload = msg["payload"]
+    assert {k: payload[k] for k in ("text", "source", "model", "confidence")} == {
+        "text": "open chrome", "source": "vosk",
+        "model": "vosk-model-small-en-in-0.4", "confidence": 0.95}
+    assert payload["metadata"] is event.metadata
+    # When the speech happened, not when recognition finished.
+    assert payload["segment_start"] == 1_700_000_000.0 < msg["timestamp"]
 
 
 def test_dictation_to_ipc_reports_whisper_not_vosk(manager):
@@ -372,21 +377,26 @@ def test_dictation_to_ipc_reports_whisper_not_vosk(manager):
     manager._handle_segment(segment(2.0))
 
     msg = manager.events[0].to_ipc()
-    assert (msg["type"], msg["source"]) == ("dictation", "whisper")
-    assert msg["model"] == "faster-whisper-small"
-    assert msg["confidence"] == pytest.approx(0.8)
-    assert msg["metadata"]["vosk_model"] == "vosk-model-small-en-in-0.4"   # breakdown kept
-    assert msg["metadata"]["mean_confidence"] == 0.5
+    payload = msg["payload"]
+    assert (msg["type"], payload["source"]) == ("dictation", "whisper")
+    assert payload["segment_start"] == 1_700_000_000.0
+    assert payload["model"] == "faster-whisper-small"
+    assert payload["confidence"] == pytest.approx(0.8)
+    assert payload["metadata"]["vosk_model"] == "vosk-model-small-en-in-0.4"   # breakdown kept
+    assert payload["metadata"]["mean_confidence"] == 0.5
 
 
-def test_to_ipc_omits_model_and_confidence_when_unknown(manager):
+def test_to_ipc_reports_unknown_model_and_confidence_as_null(manager):
+    # Every payload key is always present; an unknown value is null.
     manager._on_preview_result(VoskResult(event="partial", text="open chr", is_final=False,
                                           model="vosk-model-small-en-in-0.4"))
     manager._on_device_list_change([])
-    partial, device = (e.to_ipc() for e in manager.events)
-    assert partial["model"] == "vosk-model-small-en-in-0.4" and "confidence" not in partial
-    assert device["type"] == "device"
-    assert "model" not in device and "confidence" not in device
+    partial, device = (e.to_ipc()["payload"] for e in manager.events)
+    assert partial["model"] == "vosk-model-small-en-in-0.4" and partial["confidence"] is None
+    assert device["model"] is None and device["confidence"] is None
+    assert partial["segment_start"] is None and device["segment_start"] is None
+    assert set(partial) == set(device) == {"text", "source", "model", "confidence",
+                                           "segment_start", "metadata"}
 
 
 # ── Input devices ──────────────────────────────────────────────────────────────
