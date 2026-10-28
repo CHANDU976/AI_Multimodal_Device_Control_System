@@ -1,0 +1,276 @@
+{
+  "jobs": [
+    {
+      "job": "changes",
+      "title": "Change detection",
+      "result": "success"
+    },
+    {
+      "job": "lint",
+      "title": "Lint (blocking rules)",
+      "result": "success"
+    },
+    {
+      "job": "hygiene",
+      "title": "Repository hygiene",
+      "result": "success"
+    },
+    {
+      "job": "tests",
+      "title": "Tests (all platforms)",
+      "result": "success"
+    },
+    {
+      "job": "ml-tests",
+      "title": "NLU model tests (torch)",
+      "result": "success"
+    },
+    {
+      "job": "deps",
+      "title": "Dependency resolution",
+      "result": "skipped"
+    }
+  ],
+  "tests": [
+    {
+      "label": "tests-macos-latest",
+      "tests": 2012,
+      "passed": 1972,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 36,
+      "xfailed": 4,
+      "time": 23.9,
+      "failures": [],
+      "skip_reasons": {
+        "WindowsAdapter binds user32.dll at import": 32,
+        "collection skipped": 1,
+        "WindowsAdapter binds user32.dll": 1,
+        "real EnumDisplayMonitors": 1,
+        "could not import 'onnxruntime'": 1
+      },
+      "xfails": [
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[press_key:press the {key} key]",
+          "reason": "command_normalize drops 'the', so a non-text pattern containing it never matches"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:double click]",
+          "reason": "command_normalize turns 'double' into '2' before matching"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:click twice]",
+          "reason": "command_normalize turns 'twice' into '2' before matching"
+        },
+        {
+          "test": "tests.repo.test_fetch_deepfilternet_model::test_extract_blocks_sibling_prefix_traversal",
+          "reason": "zip-slip: the guard compares string prefixes, so '../DFN3evil/x' resolves to a SIBLING directory whose path still starts with '.../DFN3'. Compare with Path.is_relative_to(dest.resolve()) instead."
+        }
+      ]
+    },
+    {
+      "label": "ml",
+      "tests": 26,
+      "passed": 13,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 13,
+      "xfailed": 0,
+      "time": 9.3,
+      "failures": [],
+      "skip_reasons": {
+        "Models/NLU/joint-distilbert/joint_nlu.pt is a Git-LFS pointer (run `git lfs pull` to fetch it)": 13
+      },
+      "xfails": []
+    },
+    {
+      "label": "tests-ubuntu-latest",
+      "tests": 2012,
+      "passed": 1972,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 36,
+      "xfailed": 4,
+      "time": 27.5,
+      "failures": [],
+      "skip_reasons": {
+        "WindowsAdapter binds user32.dll at import": 32,
+        "collection skipped": 1,
+        "WindowsAdapter binds user32.dll": 1,
+        "real EnumDisplayMonitors": 1,
+        "could not import 'onnxruntime'": 1
+      },
+      "xfails": [
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[press_key:press the {key} key]",
+          "reason": "command_normalize drops 'the', so a non-text pattern containing it never matches"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:double click]",
+          "reason": "command_normalize turns 'double' into '2' before matching"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:click twice]",
+          "reason": "command_normalize turns 'twice' into '2' before matching"
+        },
+        {
+          "test": "tests.repo.test_fetch_deepfilternet_model::test_extract_blocks_sibling_prefix_traversal",
+          "reason": "zip-slip: the guard compares string prefixes, so '../DFN3evil/x' resolves to a SIBLING directory whose path still starts with '.../DFN3'. Compare with Path.is_relative_to(dest.resolve()) instead."
+        }
+      ]
+    },
+    {
+      "label": "tests-windows-latest",
+      "tests": 2012,
+      "passed": 2005,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 3,
+      "xfailed": 4,
+      "time": 49.1,
+      "failures": [],
+      "skip_reasons": {
+        "collection skipped": 1,
+        "checks the non-Windows guard": 1,
+        "could not import 'onnxruntime'": 1
+      },
+      "xfails": [
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[press_key:press the {key} key]",
+          "reason": "command_normalize drops 'the', so a non-text pattern containing it never matches"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:double click]",
+          "reason": "command_normalize turns 'double' into '2' before matching"
+        },
+        {
+          "test": "tests.central.test_intent_engine::test_every_pattern_is_reachable_by_exact_match[double_click:click twice]",
+          "reason": "command_normalize turns 'twice' into '2' before matching"
+        },
+        {
+          "test": "tests.repo.test_fetch_deepfilternet_model::test_extract_blocks_sibling_prefix_traversal",
+          "reason": "zip-slip: the guard compares string prefixes, so '../DFN3evil/x' resolves to a SIBLING directory whose path still starts with '.../DFN3'. Compare with Path.is_relative_to(dest.resolve()) instead."
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "by_area": {
+      "central": {
+        "statements": 2065,
+        "covered": 1927,
+        "files": 29,
+        "percent": 93.3
+      },
+      "gesture": {
+        "statements": 7207,
+        "covered": 3304,
+        "files": 13,
+        "percent": 45.8
+      },
+      "speech": {
+        "statements": 1506,
+        "covered": 1375,
+        "files": 13,
+        "percent": 91.3
+      }
+    },
+    "changed_lines": {
+      "executable": 243,
+      "covered": 217,
+      "percent": 89.3,
+      "files": [
+        {
+          "path": "Mousegesture/gesture_events.py",
+          "executable": 4,
+          "covered": 4,
+          "percent": 100.0,
+          "uncovered": ""
+        },
+        {
+          "path": "central_module/__main__.py",
+          "executable": 2,
+          "covered": 2,
+          "percent": 100.0,
+          "uncovered": ""
+        },
+        {
+          "path": "central_module/config.py",
+          "executable": 2,
+          "covered": 2,
+          "percent": 100.0,
+          "uncovered": ""
+        },
+        {
+          "path": "central_module/manager.py",
+          "executable": 71,
+          "covered": 70,
+          "percent": 98.6,
+          "uncovered": "144"
+        },
+        {
+          "path": "central_module/runners/gesture_runner.py",
+          "executable": 111,
+          "covered": 87,
+          "percent": 78.4,
+          "uncovered": "90-91, 106-114, 141-142, 149, 170-171, 211-213, 217, 227-230"
+        },
+        {
+          "path": "central_module/runners/gesture_stub.py",
+          "executable": 26,
+          "covered": 26,
+          "percent": 100.0,
+          "uncovered": ""
+        },
+        {
+          "path": "central_module/runners/speech_runner.py",
+          "executable": 23,
+          "covered": 22,
+          "percent": 95.7,
+          "uncovered": "94"
+        },
+        {
+          "path": "central_module/supervisor.py",
+          "executable": 3,
+          "covered": 3,
+          "percent": 100.0,
+          "uncovered": ""
+        },
+        {
+          "path": "speech_module/speech_manager.py",
+          "executable": 1,
+          "covered": 1,
+          "percent": 100.0,
+          "uncovered": ""
+        }
+      ]
+    }
+  },
+  "lint": {
+    "blocking": [],
+    "advisory_in_changed_files": [
+      {
+        "path": "speech_module/config.py",
+        "line": 8,
+        "code": "E501",
+        "message": "Line too long (105 > 100)"
+      },
+      {
+        "path": "tests/gesture/test_gesture_events.py",
+        "line": 25,
+        "code": "F401",
+        "message": "`math` imported but unused"
+      }
+    ],
+    "advisory_new": [],
+    "advisory_total": 40,
+    "supplied": true
+  },
+  "hygiene": {
+    "base": "daf618b4cd83158b7ab12a52ff7c9841f887b72f",
+    "head": "436af27faa89e41ba02881ab03f80a815f1463ce",
+    "files_checked": 24,
+    "errors": [],
+    "warnings": []
+  }
+}

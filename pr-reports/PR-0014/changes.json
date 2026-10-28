@@ -1,0 +1,341 @@
+{
+  "areas": [
+    {
+      "area": "central",
+      "title": "Central module (orchestrator + NLU)",
+      "files": 9,
+      "additions": 501,
+      "deletions": 97,
+      "binary": 0,
+      "components": {
+        "core": 5,
+        "runners": 3,
+        "learning": 1
+      }
+    },
+    {
+      "area": "speech",
+      "title": "Speech module",
+      "files": 2,
+      "additions": 44,
+      "deletions": 23,
+      "binary": 0,
+      "components": {
+        "config": 1,
+        "speech_manager": 1
+      }
+    },
+    {
+      "area": "gesture",
+      "title": "Gesture module",
+      "files": 2,
+      "additions": 17,
+      "deletions": 10,
+      "binary": 0,
+      "components": {
+        "config": 1,
+        "gesture_events": 1
+      }
+    },
+    {
+      "area": "tests",
+      "title": "Tests",
+      "files": 8,
+      "additions": 633,
+      "deletions": 69,
+      "binary": 0,
+      "components": {
+        "central": 5,
+        "gesture": 1,
+        "helpers": 1,
+        "speech": 1
+      }
+    },
+    {
+      "area": "docs",
+      "title": "Documentation",
+      "files": 3,
+      "additions": 141,
+      "deletions": 18,
+      "binary": 0,
+      "components": {
+        "gesture": 1,
+        "README.md": 1,
+        "docs": 1
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "Mousegesture/IPC_EVENTS.md",
+      "status": "M",
+      "additions": 21,
+      "deletions": 15,
+      "binary": false,
+      "old_path": null,
+      "area": "docs",
+      "component": "gesture"
+    },
+    {
+      "path": "Mousegesture/gesture_config.json",
+      "status": "M",
+      "additions": 1,
+      "deletions": 1,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "config"
+    },
+    {
+      "path": "Mousegesture/gesture_events.py",
+      "status": "M",
+      "additions": 16,
+      "deletions": 9,
+      "binary": false,
+      "old_path": null,
+      "area": "gesture",
+      "component": "gesture_events"
+    },
+    {
+      "path": "README.md",
+      "status": "M",
+      "additions": 6,
+      "deletions": 3,
+      "binary": false,
+      "old_path": null,
+      "area": "docs",
+      "component": "README.md"
+    },
+    {
+      "path": "central_module/README.md",
+      "status": "M",
+      "additions": 19,
+      "deletions": 6,
+      "binary": false,
+      "old_path": null,
+      "area": "central",
+      "component": "core"
+    },
+    {
+      "path": "central_module/__main__.py",
+      "status": "M",
+      "additions": 16,
+      "deletions": 4,
+      "binary": false,
+      "old_path": null,
+      "area": "central",
+      "component": "core"
+    },
+    {
+      "path": "central_module/config.py",
+      "status": "M",
+      "additions": 16,
+      "deletions": 6,
+      "binary": false,
+      "old_path": null,
+      "area": "central",
+      "component": "core"
+    },
+    {
+      "path": "central_module/learning/preferences.py",
+      "status": "M",
+      "additions": 4,
+      "deletions": 2,
+      "binary": false,
+      "old_path": null,
+      "area": "central",
+      "component": "learning"
+    },
+    {
+      "path": "central_module/manager.py",
+      "status": "M",
+      "additions": 116,
+      "deletions": 30,
+      "binary": false,
+      "old_path": null,
+      "area": "central",
+      "component": "core"
+    },
+    {
+      "path": "central_module/runners/gesture_runner.py",
+      "status": "M",
+      "additions": 206,
+      "deletions": 30,
+      "binary": false,
+      "old_path": null,
+      "area": "central",
+      "component": "runners"
+    },
+    {
+      "path": "central_module/runners/gesture_stub.py",
+      "status": "A",
+      "additions": 53,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "central",
+      "component": "runners"
+    },
+    {
+      "path": "central_module/runners/speech_runner.py",
+      "status": "M",
+      "additions": 66,
+      "deletions": 18,
+      "binary": false,
+      "old_path": null,
+      "area": "central",
+      "component": "runners"
+    },
+    {
+      "path": "central_module/supervisor.py",
+      "status": "M",
+      "additions": 5,
+      "deletions": 1,
+      "binary": false,
+      "old_path": null,
+      "area": "central",
+      "component": "core"
+    },
+    {
+      "path": "docs/ipc-protocol.md",
+      "status": "A",
+      "additions": 114,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "docs",
+      "component": "docs"
+    },
+    {
+      "path": "speech_module/config.py",
+      "status": "M",
+      "additions": 3,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "speech",
+      "component": "config"
+    },
+    {
+      "path": "speech_module/speech_manager.py",
+      "status": "M",
+      "additions": 41,
+      "deletions": 23,
+      "binary": false,
+      "old_path": null,
+      "area": "speech",
+      "component": "speech_manager"
+    },
+    {
+      "path": "tests/central/test_ipc_protocol.py",
+      "status": "A",
+      "additions": 194,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_learning.py",
+      "status": "M",
+      "additions": 7,
+      "deletions": 6,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_manager.py",
+      "status": "M",
+      "additions": 120,
+      "deletions": 14,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_runners_and_cli.py",
+      "status": "M",
+      "additions": 234,
+      "deletions": 24,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/central/test_supervisor.py",
+      "status": "M",
+      "additions": 28,
+      "deletions": 4,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "central"
+    },
+    {
+      "path": "tests/gesture/test_gesture_events.py",
+      "status": "R",
+      "additions": 10,
+      "deletions": 7,
+      "binary": false,
+      "old_path": "Mousegesture/test_gesture_events.py",
+      "area": "tests",
+      "component": "gesture"
+    },
+    {
+      "path": "tests/helpers/fakes.py",
+      "status": "M",
+      "additions": 16,
+      "deletions": 0,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "helpers"
+    },
+    {
+      "path": "tests/speech/test_speech_manager.py",
+      "status": "M",
+      "additions": 24,
+      "deletions": 14,
+      "binary": false,
+      "old_path": null,
+      "area": "tests",
+      "component": "speech"
+    }
+  ],
+  "collapsed": {},
+  "commits": [
+    {
+      "sha": "09dd16c5622a298c6992f1f3f73882f909d1317a",
+      "short": "09dd16c",
+      "author": "CHANDAN B L",
+      "date": "2026-10-22",
+      "subject": "Gesture config: cursor control always on"
+    },
+    {
+      "sha": "8c404bbdf8a663e6d46ae521c3b4e47267dcd1c1",
+      "short": "8c404bb",
+      "author": "CHANDAN B L",
+      "date": "2026-10-22",
+      "subject": "Run the gesture module as a supervised child of the central module"
+    },
+    {
+      "sha": "1f6b01b33e246735dac8f336738a24af749d8ee9",
+      "short": "1f6b01b",
+      "author": "CHANDAN B L",
+      "date": "2026-10-22",
+      "subject": "Give the speech and gesture modules one IPC protocol"
+    },
+    {
+      "sha": "a5696477d5d65b81e202fcdb979dc921d2d31c57",
+      "short": "a569647",
+      "author": "CHANDAN B L",
+      "date": "2026-10-22",
+      "subject": "Move the gesture event tests into tests/gesture so CI runs them"
+    }
+  ]
+}

@@ -19,6 +19,7 @@ developer machine and is git-ignored.
 
 | PR | Title | Author | Verdict | Files | +/− | Tests | Modules | Date |
 | --- | --- | --- | --- | ---: | --- | --- | --- | --- |
+| [#14](PR-0014/README.md) | Vv2 | CHANDU976 | ⚠️ attention | 24 | +1336/−217 | 5962✓ 0✗ | central, docs, gesture, speech, tests | 2026-10-28 |
 | [#13](PR-0013/README.md) | feat: add gesture event reporting and queue sink integration | BangerAtifAhmed | ⚠️ attention | 5 | +1965/−12 | 5575✓ 0✗ | docs, gesture | 2026-10-15 |
 | [#12](PR-0012/README.md) | Move the gesture requirements to MediaPipe 0.10.21 for Python 3.11 | CHANDU976 | ⚠️ attention | 4 | +16/−17 | 5575✓ 0✗ | ci, dependencies, docs | 2026-09-28 |
 | [#11](PR-0011/README.md) | Gesture dev | BangerAtifAhmed | ⚠️ attention | 27 | +9235/−164 | 5575✓ 0✗ | dependencies, docs, gesture, tests | 2026-09-28 |

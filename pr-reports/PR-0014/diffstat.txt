@@ -1,0 +1,25 @@
+ Mousegesture/IPC_EVENTS.md                             |  36 ++++----
+ Mousegesture/gesture_config.json                       |   2 +-
+ Mousegesture/gesture_events.py                         |  25 ++++--
+ README.md                                              |   9 +-
+ central_module/README.md                               |  25 ++++--
+ central_module/__main__.py                             |  20 ++++-
+ central_module/config.py                               |  22 +++--
+ central_module/learning/preferences.py                 |   6 +-
+ central_module/manager.py                              | 146 +++++++++++++++++++++++++-------
+ central_module/runners/gesture_runner.py               | 236 +++++++++++++++++++++++++++++++++++++++++++++-------
+ central_module/runners/gesture_stub.py                 |  53 ++++++++++++
+ central_module/runners/speech_runner.py                |  84 +++++++++++++++----
+ central_module/supervisor.py                           |   6 +-
+ docs/ipc-protocol.md                                   | 114 +++++++++++++++++++++++++
+ speech_module/config.py                                |   3 +
+ speech_module/speech_manager.py                        |  64 +++++++++-----
+ tests/central/test_ipc_protocol.py                     | 194 +++++++++++++++++++++++++++++++++++++++++++
+ tests/central/test_learning.py                         |  13 +--
+ tests/central/test_manager.py                          | 134 ++++++++++++++++++++++++++----
+ tests/central/test_runners_and_cli.py                  | 258 +++++++++++++++++++++++++++++++++++++++++++++++++++------
+ tests/central/test_supervisor.py                       |  32 ++++++-
+ {Mousegesture => tests/gesture}/test_gesture_events.py |  17 ++--
+ tests/helpers/fakes.py                                 |  16 ++++
+ tests/speech/test_speech_manager.py                    |  38 +++++----
+ 24 files changed, 1336 insertions(+), 217 deletions(-)

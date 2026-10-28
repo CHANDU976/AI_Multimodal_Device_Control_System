@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "meta": {
+    "number": 14,
+    "title": "Vv2",
+    "author": "CHANDU976",
+    "url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/pull/14",
+    "base_ref": "main",
+    "head_ref": "vv2",
+    "event": "push",
+    "run_url": "https://github.com/CHANDU976/AI_Multimodal_Device_Control_System/actions/runs/40626956628",
+    "repository": "CHANDU976/AI_Multimodal_Device_Control_System",
+    "generated_at": "2026-10-28T03:31:22Z"
+  },
+  "range": {
+    "base": "daf618b4cd83158b7ab12a52ff7c9841f887b72f",
+    "head": "436af27faa89e41ba02881ab03f80a815f1463ce",
+    "behind": 0
+  },
+  "verdict": "attention",
+  "verdict_reasons": [
+    "Calibrated constants changed"
+  ],
+  "totals": {
+    "files": 24,
+    "additions": 1336,
+    "deletions": 217,
+    "commits": 4
+  },
+  "areas": {
+    "central": {
+      "files": 9,
+      "additions": 501,
+      "deletions": 97
+    },
+    "speech": {
+      "files": 2,
+      "additions": 44,
+      "deletions": 23
+    },
+    "gesture": {
+      "files": 2,
+      "additions": 17,
+      "deletions": 10
+    },
+    "tests": {
+      "files": 8,
+      "additions": 633,
+      "deletions": 69
+    },
+    "docs": {
+      "files": 3,
+      "additions": 141,
+      "deletions": 18
+    }
+  },
+  "tests": {
+    "tests": 6062,
+    "passed": 5962,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 88,
+    "xfailed": 12,
+    "suites": 4
+  },
+  "changed_line_coverage": 89.3,
+  "attention": [
+    "Calibrated constants changed",
+    "Needs a hands-on check CI cannot do",
+    "Large change set (1553 lines)"
+  ]
+}
